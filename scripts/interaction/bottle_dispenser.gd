@@ -2,8 +2,11 @@ class_name BottleDispenser
 extends Interactable
 ## Garrafa/jarra de uma bebida na prateleira, geladeira ou bancada.
 ## Pegar = levar a garrafa na mão; ela volta sozinha depois de servir.
+## Fora do expediente dá para trocar duas garrafas de lugar (ou usar um BottleSlot vazio).
 
 var beverage: BeverageData
+## Lugar onde a garrafa mora agora (é o nó pai).
+var slot: BottleSlot
 var model: Node3D
 var _home_scale := Vector3.ONE
 
@@ -27,11 +30,13 @@ func get_prompt(player: PlayerController) -> String:
 		return "Pegar %s" % beverage.display_name
 	if player.held.is_bottle() and player.held.source == self:
 		return "Devolver %s" % beverage.display_name
+	if _can_swap(player):
+		return "Trocar de lugar com %s" % beverage.display_name
 	return ""
 
 
 func get_hint(player: PlayerController) -> String:
-	if not player.held.is_empty():
+	if not player.held.is_empty() and not _can_swap(player):
 		return "%s  (mãos ocupadas)" % beverage.display_name
 	return ""
 
@@ -44,6 +49,22 @@ func interact(player: PlayerController) -> void:
 	elif player.held.is_bottle() and player.held.source == self:
 		player.set_held(HeldItem.empty())
 		set_taken(false)
+	elif _can_swap(player):
+		var other := player.held.source as BottleDispenser
+		var other_slot := other.slot
+		var my_slot := slot
+		my_slot.place(other)
+		other_slot.place(self)
+		player.set_held(HeldItem.empty())
+		other.set_taken(false)
+		BarProgress.save_layout()
+
+
+func _can_swap(player: PlayerController) -> bool:
+	if not GameManager.is_closed() or not player.held.is_bottle():
+		return false
+	var other := player.held.source as BottleDispenser
+	return other != null and other != self and other.slot != null and slot != null
 
 
 func set_taken(taken: bool) -> void:

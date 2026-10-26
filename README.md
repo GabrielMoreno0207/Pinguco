@@ -46,6 +46,62 @@ godot --path pinguco
 
 O cardápio de giz na parede atrás do balcão mostra cor, letra, símbolo e preço de cada bebida.
 
+### Abertura, menu e opções
+
+O jogo abre com a tela de abertura (aperte qualquer tecla). Depois vem o menu principal, com
+a câmera passeando pelo bar atual ao fundo:
+
+- **ABRIR O BAR / CONTINUAR · DIA N**: começa o turno.
+- **BAR FECHADO**: entra sem abrir o turno, para recolher o caixa, investir e arrumar.
+- **COMO JOGAR**, **OPÇÕES** (volume geral, música, efeitos, sensibilidade do mouse e tela
+  cheia, salvos em `user://settings.cfg`), **NOVO JOGO** (apaga o progresso, com confirmação)
+  e **SAIR**.
+
+Na pausa (Esc) também há Opções e Menu principal.
+
+### Fora do expediente: caixa, investimentos e arrumação
+
+No fim do turno a féria vai para a **gaveta da caixa registradora** (bancada de trás, perto
+da geladeira). Em **FECHAR O CAIXA** a freguesia vai embora e você anda livre pelo bar fechado.
+Também dá para entrar direto pelo menu, em **ARRUMAR O BAR**.
+
+- **Caixa registradora**: o primeiro E recolhe o dinheiro da gaveta para o saldo. Depois, o E
+  abre o **caderninho do bar**, que tem três abas:
+  - **Atendimento**: banqueta extra (+2 lugares), cardápio reajustado (preços +15%),
+    equipamento novo (preparo 15% mais rápido), amendoim de cortesia (paciência +15%) e
+    letreiro de neon (placa ABERTO na fachada; fregueses chegam 12% mais rápido).
+  - **Reformas**: mudam o visual do bar, e cada nível rende +R$ 1 de gorjeta por pedido.
+    Pintura nova (some a parede descascada), piso novo, iluminação (varal de lâmpadas, depois
+    neon nas paredes), TV de tela grande (troca a TV de tubo e põe uma segunda TV), decoração
+    (plantas e quadros, depois jukebox) e mobília nova (banquetas estofadas, toalha e vela
+    nas mesas).
+  - **Mudar de ponto**: depois de um tempo o Pinguço pode abrir um bar totalmente novo
+    (veja abaixo).
+
+  Tudo vale a partir do próximo turno.
+- **Arrumar as bebidas**: pegue qualquer garrafa e aponte para um **círculo amarelo** (lugar
+  vazio na geladeira, na prateleira ou na bancada) ou para outra garrafa, para trocar as duas
+  de lugar. A arrumação vale para os turnos seguintes.
+- **Esc → ABRIR O BAR** começa o próximo dia.
+
+### Mudar de ponto
+
+| Ponto | Onde | Requisitos | Preço | Economia |
+|---|---|---|---|---|
+| Bar do Pinguço | Vila Esperança | início | | preços x1.0, 4 banquetas |
+| Choperia do Pinguço | Centro da cidade | dia 5 e 3 reformas | R$ 1.200 | preços x1.5, 5 banquetas, mais movimento |
+| Pinguço Beach Club | Orla da praia | dia 10 e 4 reformas | R$ 3.200 | preços x2.2, 5 banquetas, muito movimento |
+
+Cada ponto é um bar novo. Mudam as paredes, o piso, o teto, o balcão, a geladeira, a vista lá
+de fora (rua do bairro, prédios do centro ou o mar à noite), os móveis do salão (mesa de
+plástico e sinuca, mesas de madeira com barris e alvo de dardos, guarda-sol com
+espreguiçadeiras e pranchas), os cartazes, o letreiro e a decoração. Melhorias, reformas e
+arrumação começam do zero (e custam mais) no ponto novo. A área atrás do balcão mantém o mesmo
+formato, então o jeito de jogar não muda.
+
+Dia, ponto, saldo, gaveta, melhorias e arrumação ficam salvos em `user://bar_progress.json`. O botão
+"zerar progresso" do menu apaga tudo. Os modos de teste não leem nem gravam esse arquivo.
+
 ## Testes automatizados
 
 ```bash
@@ -180,14 +236,16 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
 ```
 scripts/
   main.gd                       monta o mundo e controla menu/turno/pausa/resultados
-  data/        BeverageData, CustomerProfile (Resources)
-  systems/     BeverageDatabase*, CustomerDatabase*, GameManager*, AudioManager*  (*autoload)
+  data/        BeverageData, CustomerProfile (Resources), BarLocations (temas dos pontos)
+  systems/     BeverageDatabase*, CustomerDatabase*, GameManager*, AudioManager*,
+               BarProgress* (save: dia, ponto, saldo, melhorias, arrumação),
+               Settings* (opções)  (*autoload)
                OrderSystem, DrunkennessSystem, CustomerSpawner, ShiftManager
   player/      PlayerController, InteractionSystem, Hands
-  interaction/ Interactable (base), BottleDispenser, GlassStack, PrepStation, SnackTray,
-               TrashBin, HeldItem
+  interaction/ Interactable (base), BottleDispenser, BottleSlot, CashRegister, GlassStack,
+               PrepStation, SnackTray, TrashBin, HeldItem
   customers/   CustomerController, CustomerRig, CustomerHitbox, Seat
-  ui/          HUDController, SpeechBubble, StatusTag, BeverageChip, Crosshair, DrunkMeter,
+  ui/          HUDController, MainMenu, OptionsPanel, SpeechBubble, StatusTag, BeverageChip, Crosshair, DrunkMeter,
                StarRow, UiTheme
   visual/      Mats (toon + contorno), SymbolShapes, BeverageModels
   world/       BarBuilder, BarShaders
@@ -197,8 +255,9 @@ scripts/
 - Os sistemas se comunicam por **sinais**. O HUD escuta `GameManager`, `ShiftManager` e
   `InteractionSystem`, e só os balões acompanham a câmera a cada frame.
 - **Adicionar uma bebida**: inclua um dicionário em `BeverageDatabase.CATALOG` ou salve um
-  `BeverageData` `.tres` em `res://data/beverages/`. O dispenser aparece sozinho na
-  geladeira, na prateleira ou na bancada, conforme `station`.
+  `BeverageData` `.tres` em `res://data/beverages/`. O dispenser ocupa sozinho o primeiro
+  `BottleSlot` livre da geladeira, da prateleira ou da bancada, conforme `station`. Se o
+  jogador já tiver arrumado a garrafa, ela vai para o lugar salvo.
 - **Adicionar um freguês**: inclua um perfil em `CustomerDatabase.PROFILES` ou salve um
   `.tres` em `res://data/customers/`.
 
@@ -258,7 +317,7 @@ scripts/
 2. Navegação com desvio entre fregueses e animação de sentar/levantar mais rica.
 3. Áudio real (vozes gravadas, foley) no lugar dos placeholders. A arquitetura já carrega
    por nome.
-4. Progressão: várias noites, upgrades do bar, novos fregueses (o Bebum Filósofo, o
+4. Progressão: mais pontos (com layout de balcão diferente), novos fregueses (o Bebum Filósofo, o
    Turista), bebidas misturadas (receitas com 2 garrafas) e salgados que precisam ser
    fritos.
 5. Eventos de caos: jogo na TV (todo mundo pede ao mesmo tempo), queda de energia, fiscal.

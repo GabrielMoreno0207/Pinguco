@@ -6,6 +6,15 @@ extends CanvasLayer
 signal start_requested
 signal restart_requested
 signal resume_requested
+## Fim de turno → bar fechado (recolher o caixa, investir, arrumar as bebidas).
+signal close_requested
+## Menu → entrar no bar fechado sem abrir o turno.
+signal arrange_requested
+signal reset_requested
+## Pausa → volta pro menu principal.
+signal menu_requested
+## Caderninho → mudar o bar para o próximo ponto.
+signal move_requested
 
 var _root: Control
 var _money: Label
@@ -34,11 +43,24 @@ var _toasts: Control
 var _banner: PanelContainer
 var _banner_title: Label
 var _banner_msg: Label
-var _menu: Control
+var _menu: MainMenu
 var _pause: Control
 var _results: Control
 var _results_body: VBoxContainer
 var _results_reason: Label
+var _shop: Control
+var _shop_bank: Label
+var _shop_list: VBoxContainer
+var _shop_tab := &"service"
+var _shop_tabs: Dictionary = {} # tab id -> Button
+var _options_screen: Control
+var _options_panel: OptionsPanel
+var _closed_note: PanelContainer
+var _closed_title: Label
+var _closed_cash: Label
+var _until: Label
+var _closed_place: Label
+var _pause_restart: Button
 var _focused_customer: CustomerController
 var _hud_layer: Control
 var _cust_cache := ""
@@ -62,7 +84,11 @@ func _ready() -> void:
 	_build_menu()
 	_build_pause()
 	_build_results()
+	_build_shop()
+	_build_closed_note()
+	_build_options_screen()
 	GameManager.stats_changed.connect(_on_stats_changed)
+	BarProgress.changed.connect(_on_progress_changed)
 	GameManager.feedback.connect(_on_feedback)
 	GameManager.customer_passed_out.connect(_on_passed_out)
 	GameManager.reputation_changed.connect(_on_reputation)
@@ -141,9 +167,9 @@ func _build_top_bar() -> void:
 	_time_bar.add_theme_stylebox_override("fill", fill)
 	_time_bar.add_theme_stylebox_override("background", bg)
 	bv.add_child(_time_bar)
-	var until := UiTheme.label("fecha às 02:00", 14, Color(0.8, 0.85, 0.8), false)
-	until.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bv.add_child(until)
+	_until = UiTheme.label("fecha às 02:00", 14, Color(0.8, 0.85, 0.8), false)
+	_until.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bv.add_child(_until)
 
 	var spacer2 := Control.new()
 	spacer2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -299,56 +325,11 @@ func _center_card(screen: Control, min_w := 640.0) -> VBoxContainer:
 
 
 func _build_menu() -> void:
-	_menu = _screen_base(0.45)
-	var v := _center_card(_menu, 760)
-	var title := UiTheme.outlined(UiTheme.label("PINGUÇO", 110, UiTheme.MUSTARD), UiTheme.INK, 18)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(title)
-	var tag := UiTheme.label("Encha o copo. Esvazie o juízo.", 26, UiTheme.RED)
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(tag)
-	var how := UiTheme.label(
-		"Você é dono do Bar do Pinguço. Sirva cada freguês até ele capotar no balcão!\n\n" +
-		"1. Pegue um COPO e apoie numa área de PREPARO.\n" +
-		"2. Pegue a garrafa certa e SEGURE E sobre o copo para servir.\n" +
-		"3. Pegue o copo pronto e entregue (E) ao freguês certo.\n\n" +
-		"Quanto mais bêbado, mais enrolado o pedido: confie na COR, na LETRA, no SÍMBOLO\n" +
-		"e no contexto (\"mais uma daquela!\"). O cardápio fica na parede atrás de você.\n\n" +
-		"Fique de olho no BAFÔMETRO sobre cada freguês. Bebendo, ele fica com FOME e pede\n" +
-		"salgado da estufa: atender corta o porre, recusar deixa ele bravo. Água e refri também rebatem.",
-		19, UiTheme.INK, false)
-	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	how.custom_minimum_size.x = 680
-	v.add_child(how)
-	var chips_center := CenterContainer.new()
-	v.add_child(chips_center)
-	var chips := GridContainer.new()
-	chips.columns = 7
-	chips.add_theme_constant_override("h_separation", 14)
-	chips.add_theme_constant_override("v_separation", 6)
-	chips_center.add_child(chips)
-	for bev in BeverageDatabase.all():
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 0)
-		var chip := BeverageChip.new()
-		chip.custom_minimum_size = Vector2(54, 54)
-		chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		chip.setup(bev)
-		col.add_child(chip)
-		var n := UiTheme.label(bev.display_name, 13, UiTheme.INK if not bev.is_food() else UiTheme.RED, false)
-		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(n)
-		chips.add_child(col)
-	var controls := UiTheme.label("WASD andar · Mouse olhar · E interagir (segure para servir) · Q descartar · Shift correr · Esc pausar", 15, Color(0.4, 0.3, 0.25), false)
-	controls.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(controls)
-	var btn := UiTheme.button("ABRIR O BAR")
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.pressed.connect(func() -> void:
-		AudioManager.play("ui_click")
-		start_requested.emit())
-	v.add_child(btn)
-	_menu.set_meta("focus", btn)
+	_menu = MainMenu.new()
+	_root.add_child(_menu)
+	_menu.start_requested.connect(func() -> void: start_requested.emit())
+	_menu.arrange_requested.connect(func() -> void: arrange_requested.emit())
+	_menu.new_game_requested.connect(func() -> void: reset_requested.emit())
 
 
 func _build_pause() -> void:
@@ -361,11 +342,25 @@ func _build_pause() -> void:
 	resume.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	resume.pressed.connect(func() -> void: resume_requested.emit())
 	v.add_child(resume)
-	var restart := UiTheme.button("RECOMEÇAR TURNO")
-	restart.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	restart.pressed.connect(func() -> void: restart_requested.emit())
-	v.add_child(restart)
-	var quit := UiTheme.button("FECHAR O BAR (SAIR)")
+	_pause_restart = UiTheme.button("RECOMEÇAR TURNO")
+	_pause_restart.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_pause_restart.pressed.connect(func() -> void: restart_requested.emit())
+	v.add_child(_pause_restart)
+	var opts := UiTheme.button("OPÇÕES")
+	opts.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	opts.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		_pause.visible = false
+		_options_screen.visible = true
+		_options_panel.call_deferred("focus_first"))
+	v.add_child(opts)
+	var to_menu := UiTheme.button("MENU PRINCIPAL")
+	to_menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	to_menu.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		menu_requested.emit())
+	v.add_child(to_menu)
+	var quit := UiTheme.button("SAIR DO JOGO")
 	quit.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	v.add_child(quit)
@@ -386,12 +381,284 @@ func _build_results() -> void:
 	_results_body = VBoxContainer.new()
 	_results_body.add_theme_constant_override("separation", 4)
 	v.add_child(_results_body)
-	var again := UiTheme.button("ABRIR DE NOVO")
+	var close := UiTheme.button("FECHAR O CAIXA")
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		close_requested.emit())
+	v.add_child(close)
+	var again := UiTheme.button("ABRIR O PRÓXIMO TURNO", 22)
+	again.custom_minimum_size = Vector2(280, 48)
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	again.pressed.connect(func() -> void: restart_requested.emit())
 	v.add_child(again)
-	_results.set_meta("focus", again)
+	var note := UiTheme.label("A féria fica guardada na caixa registradora até você recolher.", 15, Color(0.45, 0.3, 0.22), false)
+	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(note)
+	_results.set_meta("focus", close)
 	_results.visible = false
+
+
+func _build_shop() -> void:
+	_shop = _screen_base(0.6)
+	var v := _center_card(_shop, 820)
+	var t := UiTheme.outlined(UiTheme.label("CADERNINHO DO BAR", 52, UiTheme.MUSTARD), UiTheme.INK, 12)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	_shop_bank = UiTheme.label("", 32, UiTheme.GREEN)
+	_shop_bank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(_shop_bank)
+	var tabs := HBoxContainer.new()
+	tabs.alignment = BoxContainer.ALIGNMENT_CENTER
+	tabs.add_theme_constant_override("separation", 10)
+	v.add_child(tabs)
+	for tab: Array in [[&"service", "ATENDIMENTO"], [&"reform", "REFORMAS"], [&"move", "MUDAR DE PONTO"]]:
+		var b := UiTheme.button(tab[1], 20)
+		b.custom_minimum_size = Vector2(230, 44)
+		b.toggle_mode = true
+		b.add_theme_stylebox_override("normal", UiTheme.panel(UiTheme.CREAM.darkened(0.1), UiTheme.INK, 12, 3, false))
+		b.add_theme_stylebox_override("pressed", UiTheme.panel(UiTheme.MUSTARD, UiTheme.INK, 12, 3))
+		var id: StringName = tab[0]
+		b.pressed.connect(func() -> void:
+			AudioManager.play("ui_click")
+			_shop_tab = id
+			_refresh_shop())
+		tabs.add_child(b)
+		_shop_tabs[id] = b
+	_shop_list = VBoxContainer.new()
+	_shop_list.add_theme_constant_override("separation", 10)
+	_shop_list.custom_minimum_size.y = 430
+	v.add_child(_shop_list)
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 18)
+	v.add_child(buttons)
+	var back := UiTheme.button("VOLTAR PRO BAR")
+	back.pressed.connect(func() -> void:
+		AudioManager.play("ui_click")
+		GameManager.set_state(GameManager.State.CLOSED))
+	buttons.add_child(back)
+	var open := UiTheme.button("ABRIR O BAR")
+	open.pressed.connect(func() -> void: restart_requested.emit())
+	buttons.add_child(open)
+	_shop.set_meta("focus", back)
+	_shop.visible = false
+
+
+func _refresh_shop() -> void:
+	_shop_bank.text = "Saldo: %s" % GameManager.format_money(BarProgress.bank)
+	for id: StringName in _shop_tabs:
+		_shop_tabs[id].set_pressed_no_signal(id == _shop_tab)
+	for c in _shop_list.get_children():
+		_shop_list.remove_child(c)
+		c.queue_free()
+	match _shop_tab:
+		&"move":
+			_build_move_tab()
+		&"reform":
+			var note := UiTheme.label("Reformas mudam o visual do bar e cada nível rende +R$ 1 de gorjeta por pedido. Valem a partir do próximo turno.", 16, UiTheme.INK, false)
+			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			note.custom_minimum_size.x = 740
+			_shop_list.add_child(note)
+			for u: Dictionary in BarProgress.upgrades_of_kind(&"reform"):
+				_shop_list.add_child(_upgrade_row(u, true))
+		_:
+			var note := UiTheme.label("Melhorias de atendimento valem a partir do próximo turno.", 16, UiTheme.INK, false)
+			_shop_list.add_child(note)
+			for u: Dictionary in BarProgress.upgrades_of_kind(&"service"):
+				_shop_list.add_child(_upgrade_row(u, false))
+
+
+func _upgrade_row(u: Dictionary, compact: bool) -> PanelContainer:
+	var id: StringName = u.id
+	var lvl := BarProgress.level(id)
+	var top := BarProgress.max_level(id)
+	var row := PanelContainer.new()
+	var sb := UiTheme.panel(UiTheme.PAPER, UiTheme.INK, 12, 3, false)
+	if compact:
+		sb.content_margin_top = 4
+		sb.content_margin_bottom = 4
+	row.add_theme_stylebox_override("panel", sb)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	row.add_child(h)
+	var info := VBoxContainer.new()
+	info.add_theme_constant_override("separation", -2)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(info)
+	var name_row := HBoxContainer.new()
+	name_row.add_theme_constant_override("separation", 10)
+	info.add_child(name_row)
+	name_row.add_child(UiTheme.label(u.name, 24 if compact else 26, UiTheme.INK))
+	name_row.add_child(UiTheme.label("●".repeat(lvl) + "○".repeat(top - lvl), 20, UiTheme.MUSTARD.darkened(0.25), false))
+	info.add_child(UiTheme.label(u.desc, 15, Color(0.45, 0.3, 0.22), false))
+	var cost := BarProgress.next_cost(id)
+	var b := UiTheme.button("FEITO" if cost < 0 and compact else ("NO MÁXIMO" if cost < 0 else GameManager.format_money(cost)), 22)
+	b.custom_minimum_size = Vector2(190, 46 if compact else 52)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_style_disabled(b)
+	b.disabled = not BarProgress.can_buy(id)
+	b.pressed.connect(func() -> void:
+		if BarProgress.buy(id):
+			AudioManager.play("coin"))
+	h.add_child(b)
+	return row
+
+
+func _style_disabled(b: Button) -> void:
+	b.add_theme_stylebox_override("disabled", UiTheme.panel(UiTheme.CREAM.darkened(0.15), UiTheme.INK.lightened(0.4), 16, 4, false))
+	b.add_theme_color_override("font_disabled_color", UiTheme.INK.lightened(0.4))
+
+
+func _build_move_tab() -> void:
+	var here := BarProgress.loc()
+	_shop_list.add_child(_location_card("VOCÊ ESTÁ AQUI", here, UiTheme.PAPER))
+	var next_id := BarProgress.next_location()
+	if next_id == &"":
+		var top := UiTheme.label("Você chegou lá: este é o bar mais chique da cidade! Agora é só encher o caixa.", 20, UiTheme.GREEN, false)
+		top.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		top.custom_minimum_size.x = 740
+		_shop_list.add_child(top)
+		return
+	var next := BarLocations.get_location(next_id)
+	var card := _location_card("PRÓXIMO PONTO", next, UiTheme.MUSTARD.lightened(0.55))
+	_shop_list.add_child(card)
+	var box: VBoxContainer = card.get_meta("body")
+	for r: Dictionary in BarProgress.move_requirements():
+		var l := UiTheme.label(("✔  " if r.ok else "✘  ") + r.text, 18, UiTheme.GREEN if r.ok else UiTheme.RED, false)
+		box.add_child(l)
+	var go := UiTheme.button("MUDAR PRA CÁ  (%s)" % GameManager.format_money(next.cost), 24)
+	go.custom_minimum_size = Vector2(420, 54)
+	go.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_style_disabled(go)
+	go.disabled = not BarProgress.can_move()
+	go.pressed.connect(func() -> void:
+		AudioManager.play("coin")
+		move_requested.emit())
+	box.add_child(go)
+	var warn := UiTheme.label("Bar novo, vida nova: melhorias, reformas e arrumação começam do zero no ponto novo.", 15, Color(0.45, 0.3, 0.22), false)
+	warn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(warn)
+
+
+func _location_card(header: String, l: Dictionary, bg: Color) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UiTheme.panel(bg, UiTheme.INK, 12, 3, false))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	card.add_child(v)
+	v.add_child(UiTheme.label(header, 15, Color(0.45, 0.3, 0.22)))
+	v.add_child(UiTheme.label("%s  ·  %s" % [l.name, l.place], 28, UiTheme.INK))
+	var blurb := UiTheme.label(l.blurb, 16, UiTheme.INK, false)
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.custom_minimum_size.x = 720
+	v.add_child(blurb)
+	v.add_child(UiTheme.label("Preços x%.1f  ·  %d banquetas  ·  movimento %s" % [
+		l.price_mult, l.base_seats, "normal" if l.spawn_mult >= 1.0 else "maior"], 16, Color(0.45, 0.3, 0.22), false))
+	card.set_meta("body", v)
+	return card
+
+
+func _build_options_screen() -> void:
+	_options_screen = _screen_base(0.72)
+	var v := _center_card(_options_screen, 760)
+	_options_panel = OptionsPanel.new()
+	_options_panel.closed.connect(func() -> void:
+		_options_screen.visible = false
+		_pause.visible = GameManager.state == GameManager.State.PAUSED
+		(_pause.get_meta("focus") as Control).call_deferred("grab_focus"))
+	v.add_child(_options_panel)
+	_options_screen.visible = false
+
+
+## Faixa grande no topo da tela (freguês capotou, bar novo...).
+func show_banner(title: String, message: String) -> void:
+	_banner_title.text = title
+	_banner_msg.text = message
+	_banner.visible = true
+	_place_center(_banner, 0.0)
+	_banner.anchor_top = 0.0
+	_banner.anchor_bottom = 0.0
+	_banner.offset_top = 150.0
+	_banner.offset_bottom = 150.0 + _banner.size.y
+	_banner.pivot_offset = _banner.size / 2.0
+	_banner.scale = Vector2(0.2, 0.2)
+	_banner.modulate.a = 1.0
+	var tw := _banner.create_tween()
+	tw.tween_property(_banner, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(2.4)
+	tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(func() -> void: _banner.visible = false)
+
+
+func _build_closed_note() -> void:
+	_closed_note = PanelContainer.new()
+	_closed_note.add_theme_stylebox_override("panel", UiTheme.panel(UiTheme.PAPER, UiTheme.INK, 12, 3))
+	_closed_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_layer.add_child(_closed_note)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	_closed_note.add_child(v)
+	_closed_title = UiTheme.label("", 26, UiTheme.RED)
+	v.add_child(_closed_title)
+	_closed_place = UiTheme.label("", 16, UiTheme.INK, false)
+	v.add_child(_closed_place)
+	_closed_cash = UiTheme.label("", 18, UiTheme.GREEN)
+	v.add_child(_closed_cash)
+	for line in [
+		"• Caixa registradora (bancada, perto da geladeira): recolha",
+		"   a féria e abra o caderninho (melhorias, reformas, mudança)",
+		"• Pegue uma garrafa e leve pra outro lugar: aponte",
+		"   para um círculo amarelo ou para outra garrafa (troca)",
+		"• Esc → ABRIR O BAR quando estiver pronto",
+	]:
+		v.add_child(UiTheme.label(line, 16, Color(0.45, 0.3, 0.22), false))
+	_closed_note.visible = false
+
+
+func _off_hours() -> bool:
+	match GameManager.state:
+		GameManager.State.CLOSED, GameManager.State.SHOP:
+			return true
+		GameManager.State.PAUSED:
+			return GameManager.resume_state == GameManager.State.CLOSED
+	return false
+
+
+## Com o bar fechado a placa de cima mostra o saldo guardado em vez da féria do turno.
+func _refresh_off_hours() -> void:
+	var off := _off_hours()
+	_time_bar.visible = not off
+	if not off:
+		_until.text = "fecha às 02:00"
+		_on_stats_changed(GameManager.stats)
+		return
+	_money.text = GameManager.format_money(BarProgress.bank)
+	_served.text = "Saldo guardado"
+	_passed.text = "Gaveta %s" % GameManager.format_money(BarProgress.register_cash)
+	_score.text = "Dia %d · bar fechado" % BarProgress.day
+	_clock.text = "FECHADO"
+	_until.text = "abre às 18:00"
+	_closed_title.text = "BAR FECHADO · DIA %d" % BarProgress.day
+	_closed_place.text = "%s · %s" % [BarProgress.loc().name, BarProgress.loc().place]
+	if BarProgress.register_cash > 0:
+		_closed_cash.text = "Na gaveta: %s" % GameManager.format_money(BarProgress.register_cash)
+	else:
+		_closed_cash.text = "Saldo para investir: %s" % GameManager.format_money(BarProgress.bank)
+	_closed_note.reset_size()
+	_closed_note.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 24)
+
+
+func _refresh_menu() -> void:
+	_menu.refresh()
+
+
+func _on_progress_changed() -> void:
+	_refresh_off_hours()
+	if _shop.visible:
+		_refresh_shop()
+	if _menu.visible:
+		_refresh_menu()
 
 
 # ------------------------------------------------------------------ API pública
@@ -416,7 +683,8 @@ func show_results(reason: String) -> void:
 		c.queue_free()
 	var s := GameManager.stats
 	var rows := [
-		["Dinheiro no caixa", GameManager.format_money(s.money)],
+		["Féria do turno (na gaveta)", GameManager.format_money(s.money)],
+		["Saldo guardado", GameManager.format_money(BarProgress.bank)],
 		["Pedidos certos", str(s.correct)],
 		["Erros", str(s.wrong)],
 		["Atrasos", str(s.late)],
@@ -456,15 +724,27 @@ func _rank_title(s: Dictionary) -> String:
 func _on_state_changed(state: GameManager.State) -> void:
 	_menu.visible = state == GameManager.State.MENU
 	_pause.visible = state == GameManager.State.PAUSED
+	_options_screen.visible = false
 	_results.visible = state == GameManager.State.RESULTS
-	_hud_layer.visible = state == GameManager.State.PLAYING or state == GameManager.State.PAUSED
+	_shop.visible = state == GameManager.State.SHOP
+	_hud_layer.visible = state in [GameManager.State.PLAYING, GameManager.State.PAUSED, GameManager.State.CLOSED]
 	_bubbles.visible = state != GameManager.State.MENU
-	for screen in [_menu, _pause, _results]:
+	_toasts.visible = state != GameManager.State.MENU
+	_closed_note.visible = state == GameManager.State.CLOSED
+	_pause_restart.text = "ABRIR O BAR" if _off_hours() else "RECOMEÇAR TURNO"
+	_refresh_off_hours()
+	if _menu.visible:
+		_refresh_menu()
+	if _shop.visible:
+		_refresh_shop()
+	for screen in [_pause, _results, _shop]:
 		if screen.visible and screen.has_meta("focus"):
 			(screen.get_meta("focus") as Control).call_deferred("grab_focus")
 
 
 func _on_stats_changed(s: Dictionary) -> void:
+	if _off_hours():
+		return
 	_money.text = GameManager.format_money(s.money)
 	_served.text = "Atendidos %d" % s.served_customers
 	_passed.text = "Capotados %d" % s.passed_out
@@ -540,23 +820,8 @@ func _on_feedback(text: String, kind: StringName, world_pos: Vector3) -> void:
 	tw.tween_callback(l.queue_free)
 
 
-func _on_passed_out(customer_name: String, message: String) -> void:
-	_banner_title.text = ["CAPOTOU!", "APAGOU!", "JÁ ERA!", "BOA NOITE!"][randi() % 4]
-	_banner_msg.text = message
-	_banner.visible = true
-	_place_center(_banner, 0.0)
-	_banner.anchor_top = 0.0
-	_banner.anchor_bottom = 0.0
-	_banner.offset_top = 150.0
-	_banner.offset_bottom = 150.0 + _banner.size.y
-	_banner.pivot_offset = _banner.size / 2.0
-	_banner.scale = Vector2(0.2, 0.2)
-	_banner.modulate.a = 1.0
-	var tw := _banner.create_tween()
-	tw.tween_property(_banner, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	tw.tween_interval(2.4)
-	tw.tween_property(_banner, "modulate:a", 0.0, 0.4)
-	tw.tween_callback(func() -> void: _banner.visible = false)
+func _on_passed_out(_customer_name: String, message: String) -> void:
+	show_banner(["CAPOTOU!", "APAGOU!", "JÁ ERA!", "BOA NOITE!"][randi() % 4], message)
 	AudioManager.play("coin", 0.8)
 
 

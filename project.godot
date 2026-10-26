@@ -16,6 +16,8 @@ BeverageDatabase="*res://scripts/systems/beverage_database.gd"
 CustomerDatabase="*res://scripts/systems/customer_database.gd"
 AudioManager="*res://scripts/systems/audio_manager.gd"
 GameManager="*res://scripts/systems/game_manager.gd"
+BarProgress="*res://scripts/systems/bar_progress.gd"
+Settings="*res://scripts/systems/settings.gd"
 
 [display]
 

@@ -106,7 +106,7 @@ func complete(customer: CustomerController) -> int:
 	var bev := BeverageDatabase.get_beverage(o.beverage_id)
 	var speed_tip := int(round(o.patience_fraction() * 4.0)) if o.expired_count == 0 else 0
 	var drunk_tip := o.stage # bêbado é generoso
-	var total := bev.price + customer.profile.tip + speed_tip + drunk_tip
+	var total := BarProgress.price_of(bev) + customer.profile.tip + speed_tip + drunk_tip + BarProgress.ambience_tip()
 	order_closed.emit(o, true)
 	return total
 

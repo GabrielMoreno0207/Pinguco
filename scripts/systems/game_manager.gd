@@ -2,7 +2,8 @@ extends Node
 ## GameManager (autoload): estado global da partida, pontuação e eventos de alto nível.
 ## Sistemas emitem eventos aqui; o HUD apenas escuta (não faz polling do estado).
 
-enum State { MENU, PLAYING, PAUSED, RESULTS }
+## CLOSED = fora do expediente (anda pelo bar sem fregueses); SHOP = caderninho de investimentos.
+enum State { MENU, PLAYING, PAUSED, RESULTS, CLOSED, SHOP }
 
 signal state_changed(state: State)
 signal stats_changed(stats: Dictionary)
@@ -13,6 +14,8 @@ signal reputation_changed(value: int)
 const MAX_REPUTATION := 5
 
 var state: State = State.MENU
+## Para onde a pausa volta (turno ou bar fechado).
+var resume_state: State = State.PLAYING
 var stats := {}
 var reputation := MAX_REPUTATION
 ## Renderer de compatibilidade (GPUs antigas): menos luzes dinâmicas, sem MSAA.
@@ -51,9 +54,9 @@ func set_state(new_state: State) -> void:
 	if state == new_state:
 		return
 	state = new_state
-	get_tree().paused = state == State.PAUSED or state == State.RESULTS
+	get_tree().paused = state == State.PAUSED or state == State.RESULTS or state == State.SHOP
 	match state:
-		State.PLAYING:
+		State.PLAYING, State.CLOSED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		_:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -62,6 +65,26 @@ func set_state(new_state: State) -> void:
 
 func is_playing() -> bool:
 	return state == State.PLAYING
+
+
+## O jogador pode andar e interagir: durante o turno ou com o bar fechado.
+func can_act() -> bool:
+	return state == State.PLAYING or state == State.CLOSED
+
+
+func is_closed() -> bool:
+	return state == State.CLOSED
+
+
+func pause() -> void:
+	if can_act():
+		resume_state = state
+		set_state(State.PAUSED)
+
+
+func resume() -> void:
+	if state == State.PAUSED:
+		set_state(resume_state)
 
 
 func add_money(amount: int) -> void:

@@ -52,6 +52,13 @@ func _run() -> void:
 	GameManager.set_state(GameManager.State.MENU)
 	await wait(0.5)
 	await shot("01_menu")
+	if shots:
+		var menu: MainMenu = main.hud._menu
+		for page: StringName in [&"splash", &"howto", &"options", &"confirm"]:
+			menu.show_page(page)
+			await wait(1.6 if page == &"splash" else 0.3)
+			await shot("01_menu_%s" % page)
+		menu.show_page(&"main")
 	main._start_shift()
 	spawner.stop() # controlamos os fregueses manualmente
 	await wait(0.3)
@@ -278,6 +285,131 @@ func _run() -> void:
 	await wait(0.6)
 	check(GameManager.state == GameManager.State.RESULTS, "turno termina e mostra resultados")
 	await shot("09_results")
+
+	# ---------------------------------------------------------------- bar fechado: caixa
+	var earned: int = GameManager.stats.money
+	check(BarProgress.register_cash == earned, "féria do turno vai pra gaveta do caixa (R$ %d)" % earned)
+	main._close_bar()
+	await wait(0.3)
+	check(GameManager.is_closed(), "fechar o caixa deixa o bar fechado (estado CLOSED)")
+	BarProgress.register_cash += 500 # garante saldo para testar o investimento
+	var bank0 := BarProgress.bank
+	player.interaction.force_interact(bar.cash_register)
+	check(BarProgress.register_cash == 0 and BarProgress.bank == bank0 + earned + 500, "recolher a gaveta passa o dinheiro pro saldo")
+	player.interaction.force_interact(bar.cash_register)
+	check(GameManager.state == GameManager.State.SHOP, "caixa vazia abre o caderninho de investimentos")
+	await wait(0.2)
+	await shot("10_shop")
+	if shots:
+		for tab: StringName in [&"reform", &"move"]:
+			main.hud._shop_tab = tab
+			main.hud._refresh_shop()
+			await wait(0.2)
+			await shot("10_shop_%s" % tab)
+		main.hud._shop_tab = &"service"
+	var cost := BarProgress.next_cost(&"cardapio")
+	var bank1 := BarProgress.bank
+	check(BarProgress.buy(&"cardapio") and BarProgress.bank == bank1 - cost and BarProgress.level(&"cardapio") == 1,
+		"comprar melhoria desconta do saldo")
+	var cerveja := BeverageDatabase.get_beverage(&"cerveja")
+	check(BarProgress.price_of(cerveja) > cerveja.price, "cardápio reajustado aumenta o preço")
+	BarProgress.bank = 0
+	check(not BarProgress.buy(&"neon"), "sem saldo não compra")
+	GameManager.set_state(GameManager.State.CLOSED)
+
+	# ---------------------------------------------------------------- bar fechado: arrumação
+	var beer: BottleDispenser = bar.dispensers[&"cerveja"]
+	var empty: BottleSlot = null
+	for sl: BottleSlot in bar.bottle_slots.values():
+		if sl.occupant == null and String(sl.id).begins_with("shelf_"):
+			empty = sl
+			break
+	check(empty != null, "prateleira tem lugar vazio para arrumar")
+	player.interaction.force_interact(beer)
+	check(player.held.is_bottle() and player.held.source == beer, "pega garrafa com o bar fechado")
+	if shots:
+		player.global_position = Vector3(empty.global_position.x, player.global_position.y, -1.3)
+		_aim_at(player, empty.global_position + Vector3(0, 0.15, 0))
+		await wait(0.3)
+		check(player.interaction.focused == empty, "mirar num lugar vazio foca o lugar")
+		await shot("11a_arrange")
+	player.interaction.force_interact(empty)
+	check(beer.slot == empty and beer.get_parent() == empty and beer.model.visible and player.held.is_empty(),
+		"garrafa guardada em outro lugar")
+	check(BarProgress.slot_of(&"cerveja") == empty.id, "arrumação registrada no progresso")
+	var pinga: BottleDispenser = bar.dispensers[&"pinga"]
+	var pinga_slot := pinga.slot
+	player.interaction.force_interact(pinga)
+	player.interaction.force_interact(beer)
+	check(beer.slot == pinga_slot and pinga.slot == empty and pinga_slot.occupant == beer and empty.occupant == pinga,
+		"troca duas garrafas de lugar")
+	await shot("11_closed")
+
+	# ---------------------------------------------------------------- reformas e mudança de ponto
+	BarProgress.bank = 100000
+	var tip0 := BarProgress.ambience_tip()
+	check(BarProgress.buy(&"pintura") and BarProgress.ambience_tip() == tip0 + 1, "reforma comprada rende gorjeta extra")
+	check(not BarProgress.can_move(), "não muda de ponto antes do tempo (dia %d)" % BarProgress.day)
+	BarProgress.day = 5
+	for id: StringName in [&"piso", &"luz", &"tv"]:
+		BarProgress.buy(id)
+	check(BarProgress.reform_count() >= 3 and BarProgress.can_move(), "dia 5 + 3 reformas + dinheiro libera o próximo ponto")
+	var bank_before := BarProgress.bank
+	check(BarProgress.move_to_next() and BarProgress.location == &"choperia", "muda para a Choperia")
+	check(BarProgress.bank == bank_before - int(BarLocations.get_location(&"choperia").cost), "mudança desconta o preço do ponto")
+	check(BarProgress.reform_count() == 0 and BarProgress.layout.is_empty(), "bar novo começa sem reformas nem arrumação")
+	var beer_price := BarProgress.price_of(BeverageDatabase.get_beverage(&"cerveja"))
+	check(beer_price > BeverageDatabase.get_beverage(&"cerveja").price, "ponto novo cobra mais caro (cerveja R$ %d)" % beer_price)
+
+	# save: grava e lê de volta (arquivo de teste, o save do jogador fica intacto)
+	var bp_script: GDScript = load("res://scripts/systems/bar_progress.gd")
+	var w: Node = bp_script.new()
+	w.save_path = "user://autotest_progress.json"
+	w.day = 7
+	w.location = &"choperia"
+	w.bank = 1234
+	w.register_cash = 56
+	w.levels = {&"pintura": 1, &"luz": 2}
+	w.layout = {&"cerveja": &"shelf_3"}
+	w._commit()
+	var r: Node = bp_script.new()
+	r.save_path = w.save_path
+	r._load()
+	check(r.day == 7 and r.location == &"choperia" and r.bank == 1234 and r.register_cash == 56
+		and r.level(&"luz") == 2 and r.level(&"pintura") == 1 and r.slot_of(&"cerveja") == &"shelf_3",
+		"save grava e carrega ponto, dinheiro, reformas e arrumação")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(w.save_path))
+	w.free()
+	r.free()
+
+	# monta cada ponto, sem e com todas as reformas, e confere que o bar fica jogável
+	main.bar.visible = false
+	# só um WorldEnvironment vale por vez: tira o do bar principal enquanto testa os outros
+	var main_env: WorldEnvironment = main.bar.find_children("*", "WorldEnvironment", false, false)[0]
+	main.bar.remove_child(main_env)
+	for loc_id: StringName in BarLocations.ORDER:
+		for full in [false, true]:
+			BarProgress.location = loc_id
+			BarProgress.levels = {}
+			if full:
+				for u: Dictionary in BarProgress.UPGRADES:
+					BarProgress.levels[u.id] = BarProgress.max_level(u.id)
+			BarProgress.layout = {}
+			var b := BarBuilder.new()
+			main.world.add_child(b)
+			b.build()
+			var ok := b.dispensers.size() == BeverageDatabase.drinks().size() and b.seats.size() == BarProgress.seat_count() \
+				and b.cash_register != null and b.prep_stations.size() == 3
+			check(ok, "%s %s: monta com %d banquetas e todas as garrafas" % [loc_id, "reformado" if full else "original", b.seats.size()])
+			if shots:
+				player.global_position = Vector3(0, 0.05, -1.0)
+				_aim_at(player, Vector3(0, 1.4, 4.5))
+				await wait(0.4)
+				await shot("12_%s_%s" % [loc_id, "full" if full else "base"])
+			b.queue_free()
+			await get_tree().process_frame
+	main.bar.visible = true
+	main.bar.add_child(main_env)
 
 	print("=== RESULTADO: %d ok, %d falhas ===" % [passes, failures.size()])
 	for f in failures:

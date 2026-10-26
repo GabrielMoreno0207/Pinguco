@@ -54,7 +54,7 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not GameManager.is_playing() or GameManager.has_meta("autotest"):
+	if not GameManager.can_act() or GameManager.has_meta("autotest"):
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		apply_look(event.relative)
@@ -63,8 +63,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func apply_look(relative: Vector2) -> void:
-	rotate_y(-relative.x * mouse_sensitivity)
-	_pitch = clampf(_pitch - relative.y * mouse_sensitivity, deg_to_rad(-82), deg_to_rad(82))
+	rotate_y(-relative.x * mouse_sensitivity * Settings.mouse)
+	_pitch = clampf(_pitch - relative.y * mouse_sensitivity * Settings.mouse, deg_to_rad(-82), deg_to_rad(82))
 	camera.rotation.x = _pitch
 
 
@@ -72,7 +72,7 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	var input := Vector2.ZERO
-	if GameManager.is_playing():
+	if GameManager.can_act():
 		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var dir := (transform.basis * Vector3(input.x, 0, input.y)).normalized()
 	var speed := sprint_speed if Input.is_action_pressed("sprint") else walk_speed

@@ -131,7 +131,8 @@ func _line(lines: PackedStringArray) -> String:
 # ------------------------------------------------------------------ ciclo
 
 func _process(delta: float) -> void:
-	if not GameManager.is_playing():
+	# com o bar fechado eles continuam vivos só para sair pela porta
+	if not GameManager.can_act():
 		return
 	_t += delta
 	_state_timer -= delta
@@ -239,7 +240,7 @@ func is_hungry() -> bool:
 
 func _place_order() -> void:
 	var bev := _pick_order_item()
-	var patience := profile.patience * (1.0 - stage() * 0.08)
+	var patience := profile.patience * BarProgress.patience_multiplier() * (1.0 - stage() * 0.08)
 	var order := order_system.create_order(self, bev, patience)
 	state = State.ORDERING
 	_fickle_checked = false

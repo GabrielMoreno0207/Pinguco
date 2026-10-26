@@ -34,7 +34,7 @@ func _process(delta: float) -> void:
 	_timer -= delta
 	if _timer <= 0.0:
 		var progress := shift.progress() if shift else 0.0
-		_timer = lerpf(interval_start, interval_end, progress) + randf_range(-1.5, 1.5)
+		_timer = lerpf(interval_start, interval_end, progress) * BarProgress.spawn_interval_multiplier() + randf_range(-1.5, 1.5)
 		spawn()
 
 

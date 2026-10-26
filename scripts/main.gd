@@ -1,6 +1,7 @@
 extends Node
 ## Cena principal: monta o mundo, conecta os sistemas e controla o fluxo
-## menu → turno → pausa → resultados.
+## abertura/menu → turno → pausa → resultados → bar fechado (caixa, caderninho, arrumação).
+## Comprar reforma ou mudar de ponto vale no próximo carregamento da cena.
 
 var world: Node3D
 var bar: BarBuilder
@@ -9,12 +10,18 @@ var order_system: OrderSystem
 var shift: ShiftManager
 var spawner: CustomerSpawner
 var hud: HUDController
+## Câmera que passeia pelo bar atrás do menu principal.
+var menu_cam: Camera3D
+var _menu_t := 0.0
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	randomize()
-	if OS.get_cmdline_user_args().has("--gallery"):
+	var args := OS.get_cmdline_user_args()
+	if args.has("--autotest") or args.has("--bench"):
+		GameManager.set_meta("autotest", true)
+	if args.has("--gallery"):
 		# vitrine de modelos (garrafas, símbolos e fregueses) para conferir o visual
 		GameManager.set_meta("autotest", true)
 		add_child(load("res://scripts/tests/gallery.gd").new())
@@ -53,6 +60,11 @@ func _ready() -> void:
 	player.global_position = bar.player_spawn
 	player.rotation.y = PI # começa de frente para o balcão/clientes
 
+	menu_cam = Camera3D.new()
+	menu_cam.name = "MenuCamera"
+	menu_cam.fov = 70.0
+	world.add_child(menu_cam)
+
 	hud = HUDController.new()
 	hud.name = "HUD"
 	add_child(hud)
@@ -60,7 +72,17 @@ func _ready() -> void:
 	hud.connect_shift(shift)
 	hud.start_requested.connect(_start_shift)
 	hud.restart_requested.connect(_restart)
-	hud.resume_requested.connect(func() -> void: GameManager.set_state(GameManager.State.PLAYING))
+	hud.resume_requested.connect(GameManager.resume)
+	hud.close_requested.connect(_close_bar)
+	hud.arrange_requested.connect(_close_bar)
+	hud.reset_requested.connect(func() -> void:
+		BarProgress.reset()
+		_restart_to_menu())
+	hud.menu_requested.connect(func() -> void:
+		GameManager.set_state(GameManager.State.MENU)
+		_restart_to_menu())
+	hud.move_requested.connect(_move_bar)
+	bar.cash_register.shop_requested.connect(func() -> void: GameManager.set_state(GameManager.State.SHOP))
 
 	spawner.customer_spawned.connect(hud.add_customer_bubble)
 	shift.shift_ended.connect(_on_shift_ended)
@@ -69,17 +91,21 @@ func _ready() -> void:
 	AudioManager.start_loop("ambience")
 	AudioManager.start_loop("music")
 
-	if OS.get_cmdline_user_args().has("--autotest"):
-		GameManager.set_meta("autotest", true)
+	if args.has("--autotest"):
 		var t: Node = load("res://scripts/tests/auto_test.gd").new()
 		t.name = "AutoTest"
 		add_child(t)
-	elif OS.get_cmdline_user_args().has("--bench"):
-		GameManager.set_meta("autotest", true)
+	elif args.has("--bench"):
 		add_child(load("res://scripts/tests/bench.gd").new())
 	elif GameManager.get_meta("skip_menu", false):
 		GameManager.set_meta("skip_menu", false)
 		_start_shift()
+	elif GameManager.get_meta("enter_closed", false):
+		GameManager.set_meta("enter_closed", false)
+		_close_bar()
+		var loc := BarProgress.loc()
+		hud.show_banner("BAR NOVO!", "%s · %s" % [loc.name, loc.place])
+		AudioManager.play("correct")
 	else:
 		GameManager.set_state(GameManager.State.MENU)
 
@@ -98,8 +124,48 @@ func _restart() -> void:
 	get_tree().reload_current_scene()
 
 
+## Recarrega a cena com o bar montado a partir do progresso salvo (melhorias + arrumação).
+func _restart_to_menu() -> void:
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+
+## Fora do expediente: a freguesia vai embora e o jogador anda livre pelo bar.
+func _close_bar() -> void:
+	spawner.stop()
+	shift.running = false
+	spawner.clear_all()
+	bar.set_clock(26.0)
+	GameManager.set_state(GameManager.State.CLOSED)
+
+
+## Paga o ponto novo e recarrega a cena já com o bar novo, fechado para arrumar.
+func _move_bar() -> void:
+	if not BarProgress.move_to_next():
+		return
+	GameManager.set_meta("enter_closed", true)
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+
+func _process(delta: float) -> void:
+	if menu_cam == null:
+		return
+	if GameManager.state == GameManager.State.MENU:
+		if not menu_cam.current:
+			menu_cam.make_current()
+		# passeio lento pelo salão, olhando para o balcão
+		_menu_t += delta * 0.11
+		var t := _menu_t
+		menu_cam.position = Vector3(sin(t) * 2.8, 1.8 + sin(t * 0.7) * 0.12, 3.5 + cos(t * 0.8) * 0.6)
+		menu_cam.look_at(Vector3(sin(t * 0.5) * 0.9, 1.25, -1.3))
+	elif menu_cam.current:
+		player.camera.make_current()
+
+
 func _on_shift_ended(reason: String) -> void:
 	spawner.stop()
+	BarProgress.deposit_shift(GameManager.stats.money)
 	hud.show_results(reason)
 	GameManager.set_state(GameManager.State.RESULTS)
 	AudioManager.play("correct", 0.7)
@@ -107,8 +173,8 @@ func _on_shift_ended(reason: String) -> void:
 
 func _notification(what: int) -> void:
 	# alt-tab pausa o turno
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and GameManager.is_playing() and not GameManager.has_meta("autotest"):
-		GameManager.set_state(GameManager.State.PAUSED)
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and GameManager.can_act() and not GameManager.has_meta("autotest"):
+		GameManager.pause()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -116,10 +182,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("pause"):
 		match GameManager.state:
-			GameManager.State.PLAYING:
-				GameManager.set_state(GameManager.State.PAUSED)
+			GameManager.State.PLAYING, GameManager.State.CLOSED:
+				GameManager.pause()
 			GameManager.State.PAUSED:
-				GameManager.set_state(GameManager.State.PLAYING)
-	elif event is InputEventMouseButton and event.pressed and GameManager.is_playing() \
+				GameManager.resume()
+			GameManager.State.SHOP:
+				GameManager.set_state(GameManager.State.CLOSED)
+	elif event is InputEventMouseButton and event.pressed and GameManager.can_act() \
 			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED

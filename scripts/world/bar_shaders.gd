@@ -1,7 +1,8 @@
 class_name BarShaders
 extends RefCounted
-## Shaders procedurais do cenário: piso de caquinhos vermelhos, azulejo + parede pintada,
-## tela da TV passando futebol e o céu noturno da rua.
+## Shaders procedurais do cenário: piso de caquinhos vermelhos, pisos alternativos
+## (ladrilho, tábua, areia), azulejo + parede pintada (com desgaste), tela da TV passando
+## futebol e a vista lá de fora (bairro, centro da cidade ou praia).
 
 const FLOOR := """
 shader_type spatial;
@@ -46,6 +47,60 @@ void fragment() {
 }
 """
 
+## Pisos alternativos: 1 = ladrilho hidráulico xadrez, 2 = tábuas de madeira, 3 = areia.
+const FLOOR_ALT := """
+shader_type spatial;
+render_mode diffuse_toon, specular_toon;
+uniform int pattern = 1;
+uniform vec3 col_a : source_color = vec3(0.9, 0.88, 0.82);
+uniform vec3 col_b : source_color = vec3(0.15, 0.15, 0.16);
+uniform float grime = 0.0;
+varying vec3 wpos;
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+
+void fragment() {
+	vec2 p = wpos.xz;
+	vec3 col;
+	float rough = 0.6;
+	if (pattern == 1) {
+		vec2 uv = p / 0.4;
+		vec2 cell = floor(uv);
+		vec2 f = fract(uv);
+		bool checker = mod(cell.x + cell.y, 2.0) < 1.0;
+		col = checker ? col_a : col_b;
+		// florzinha do ladrilho no centro de cada peça
+		float r = length(f - 0.5);
+		col = mix(col, checker ? col_b : col_a, (1.0 - smoothstep(0.1, 0.13, r)) * 0.6);
+		col = mix(vec3(0.7, 0.68, 0.62), col, step(0.03, f.x) * step(0.03, f.y));
+		rough = 0.3;
+	} else if (pattern == 2) {
+		vec2 uv = vec2(p.x / 1.6, p.y / 0.18);
+		float row = floor(uv.y);
+		uv.x += hash(vec2(row, 3.0)) * 3.0;
+		vec2 cell = vec2(floor(uv.x), row);
+		vec2 f = fract(uv);
+		float grain = 0.5 + 0.5 * sin(p.x * 18.0 + hash(cell) * 6.0 + sin(p.y * 40.0) * 0.5);
+		col = mix(col_a, col_b, hash(cell) * 0.7 + grain * 0.3);
+		col *= 0.92 + 0.12 * hash(cell * 2.3);
+		col = mix(col * 0.55, col, step(0.06, f.y) * step(0.008, f.x));
+		rough = 0.45;
+	} else {
+		float n = hash(floor(p * 40.0)) * 0.5 + hash(floor(p * 9.0)) * 0.5;
+		col = mix(col_a, col_b, n);
+		float ripple = 0.5 + 0.5 * sin(p.x * 3.0 + sin(p.y * 2.0) * 2.0);
+		col *= 0.94 + ripple * 0.08;
+		rough = 0.95;
+	}
+	col *= 1.0 - grime * 0.25 * hash(floor(p * 2.0));
+	ALBEDO = col;
+	ROUGHNESS = rough;
+	SPECULAR = 0.35;
+}
+"""
+
 const WALL := """
 shader_type spatial;
 render_mode diffuse_toon, specular_toon;
@@ -55,10 +110,23 @@ uniform vec3 paint : source_color = vec3(0.98, 0.84, 0.45);
 uniform vec3 stripe : source_color = vec3(0.16, 0.5, 0.36);
 uniform float tile_top = 1.25;
 uniform float tile_size = 0.16;
+// 0 = parede nova; 1 = manchada e descascando
+uniform float grime = 0.0;
 varying vec3 wpos;
 varying vec3 wnorm;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = hash(i);
+	float b = hash(i + vec2(1.0, 0.0));
+	float c = hash(i + vec2(0.0, 1.0));
+	float d = hash(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -78,6 +146,14 @@ void fragment() {
 	vec3 tiled = mix(vec3(0.78, 0.78, 0.74), tile, grout);
 	float n = hash(floor(vec2(u, wpos.y) * 6.0)) * 0.05;
 	vec3 painted = paint * (0.95 + n);
+	// desgaste: manchas de umidade e reboco aparecendo onde a tinta descascou
+	vec2 wp = vec2(u, wpos.y);
+	float blot = vnoise(wp * 1.6) * 0.65 + vnoise(wp * 5.0) * 0.35;
+	float peel = smoothstep(0.66, 0.7, blot) * grime;
+	painted *= 1.0 - grime * 0.22 * vnoise(wp * 0.7 + 3.0);
+	painted = mix(painted, vec3(0.82, 0.76, 0.66), peel);
+	painted = mix(painted, painted * 0.7, smoothstep(0.62, 0.66, blot) * (1.0 - smoothstep(0.66, 0.7, blot)) * grime);
+	tiled *= 1.0 - grime * 0.18 * step(0.8, hash(cell * 1.7));
 	float band = step(tile_top, wpos.y);
 	vec3 col = mix(tiled, painted, band);
 	// faixa de acabamento entre azulejo e pintura
@@ -115,8 +191,61 @@ void fragment() {
 const STREET := """
 shader_type spatial;
 render_mode unshaded;
-void fragment() {
-	vec2 uv = UV;
+// 0 = rua do bairro, 1 = prédios do centro, 2 = praia à noite
+uniform int scene = 0;
+
+float h1(float x) { return fract(sin(x * 91.7) * 43758.5); }
+
+vec3 city(vec2 uv) {
+	vec3 sky = mix(vec3(0.08, 0.06, 0.16), vec3(0.3, 0.14, 0.22), 1.0 - uv.y);
+	float bx = floor(uv.x * 9.0);
+	float top = 0.45 + h1(bx) * 0.5;
+	float b = step(uv.y, top);
+	vec3 bcol = mix(vec3(0.1, 0.1, 0.14), vec3(0.16, 0.14, 0.2), h1(bx + 4.0));
+	vec2 w = vec2(fract(uv.x * 54.0), fract(uv.y * 40.0));
+	float win = step(0.35, w.x) * step(0.4, w.y) * step(0.5, h1(floor(uv.x * 54.0) * 3.1 + floor(uv.y * 40.0) * 7.7));
+	bcol = mix(bcol, mix(vec3(1.0, 0.85, 0.5), vec3(0.6, 0.85, 1.0), h1(bx + 9.0)), win * step(0.16, uv.y));
+	vec3 col = mix(sky, bcol, b);
+	// rua com faróis passando
+	col = mix(col, vec3(0.18, 0.18, 0.2), step(uv.y, 0.12));
+	float car = step(abs(fract(uv.x * 2.0 - TIME * 0.15) - 0.5), 0.03) * step(uv.y, 0.07) * step(0.03, uv.y);
+	return mix(col, vec3(1.0, 0.9, 0.6), car);
+}
+
+vec3 beach(vec2 uv) {
+	vec3 sky = mix(vec3(0.03, 0.05, 0.14), vec3(0.16, 0.12, 0.3), 1.0 - uv.y);
+	float stars = step(0.996, fract(sin(dot(floor(uv * 160.0), vec2(12.9, 78.2))) * 43758.5));
+	vec3 col = sky + stars * uv.y;
+	vec2 moon = vec2(0.72, 0.78);
+	col = mix(col, vec3(1.0, 0.97, 0.85), 1.0 - smoothstep(0.045, 0.05, length((uv - moon) * vec2(2.2, 1.0))));
+	// mar com o reflexo da lua
+	float sea = step(uv.y, 0.42);
+	vec3 water = mix(vec3(0.02, 0.1, 0.2), vec3(0.05, 0.2, 0.32), uv.y / 0.42);
+	float shimmer = step(0.75, fract(uv.y * 60.0 + sin(uv.x * 30.0 + TIME) * 0.6)) * (1.0 - smoothstep(0.0, 0.07, abs(uv.x - moon.x)));
+	water += shimmer * 0.5;
+	col = mix(col, water, sea);
+	// faixa de areia e espuma
+	col = mix(col, vec3(0.75, 0.66, 0.48), step(uv.y, 0.14));
+	col = mix(col, vec3(0.85, 0.92, 0.95), step(abs(uv.y - 0.145 - sin(uv.x * 20.0 + TIME) * 0.006), 0.006));
+	// coqueiros em silhueta
+	for (int i = 0; i < 3; i++) {
+		float px = 0.12 + float(i) * 0.38;
+		float trunk = step(abs(uv.x - px - (uv.y - 0.14) * 0.15), 0.008) * step(uv.y, 0.62) * step(0.14, uv.y);
+		vec2 c = vec2(px + 0.07, 0.62);
+		float leaves = 0.0;
+		for (int k = 0; k < 5; k++) {
+			float a = float(k) * 1.25 + 0.3;
+			vec2 d = (uv - c) * vec2(1.8, 1.0);
+			vec2 dir = vec2(cos(a), sin(a) * 0.5);
+			float along = clamp(dot(d, dir), 0.0, 0.12);
+			leaves += step(length(d - dir * along), 0.012 + along * 0.05);
+		}
+		col = mix(col, vec3(0.02, 0.03, 0.05), clamp(trunk + leaves, 0.0, 1.0));
+	}
+	return col;
+}
+
+vec3 street(vec2 uv) {
 	vec3 sky = mix(vec3(0.05, 0.06, 0.16), vec3(0.12, 0.1, 0.25), uv.y);
 	float stars = step(0.997, fract(sin(dot(floor(uv * 160.0), vec2(12.9, 78.2))) * 43758.5));
 	vec3 col = sky + stars * (1.0 - uv.y) * 0.8;
@@ -127,7 +256,17 @@ void fragment() {
 	house_col = mix(house_col, vec3(1.0, 0.8, 0.4), win * step(0.5, fract(sin(floor(uv.x * 14.0) * 7.0) * 99.0)));
 	col = mix(col, house_col, houses);
 	col = mix(col, vec3(0.2, 0.2, 0.22), step(uv.y, 0.12));
-	ALBEDO = col;
+	return col;
+}
+
+void fragment() {
+	if (scene == 1) {
+		ALBEDO = city(UV);
+	} else if (scene == 2) {
+		ALBEDO = beach(UV);
+	} else {
+		ALBEDO = street(UV);
+	}
 }
 """
 

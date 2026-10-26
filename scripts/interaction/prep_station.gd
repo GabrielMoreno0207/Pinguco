@@ -96,7 +96,7 @@ func interact_hold(player: PlayerController, delta: float) -> float:
 	if _pouring_bev != bev:
 		_pouring_bev = bev
 		progress = 0.0
-	progress += delta / maxf(bev.prep_time, 0.1)
+	progress += delta / maxf(BarProgress.prep_time_of(bev), 0.1)
 	_pour_time += delta
 	if not _pour_audio.playing:
 		_pour_audio.pitch_scale = 0.9 + bev.prep_time * 0.05

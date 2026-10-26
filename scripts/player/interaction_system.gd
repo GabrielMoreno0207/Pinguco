@@ -22,12 +22,12 @@ func setup(player: PlayerController, camera: Camera3D) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("interact") and GameManager.is_playing():
+	if event.is_action_pressed("interact") and GameManager.can_act():
 		_press_queued = true
 
 
 func _physics_process(delta: float) -> void:
-	if not GameManager.is_playing():
+	if not GameManager.can_act():
 		_press_queued = false
 		return
 	var target := _raycast()
