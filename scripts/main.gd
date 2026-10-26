@@ -14,6 +14,11 @@ var hud: HUDController
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	randomize()
+	if OS.get_cmdline_user_args().has("--gallery"):
+		# vitrine de modelos (garrafas, símbolos e fregueses) para conferir o visual
+		GameManager.set_meta("autotest", true)
+		add_child(load("res://scripts/tests/gallery.gd").new())
+		return
 	world = Node3D.new()
 	world.name = "World"
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE

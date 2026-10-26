@@ -39,6 +39,8 @@ func reset_stats() -> void:
 		"angry_left": 0,
 		"best_combo": 0,
 		"combo": 0,
+		"food_served": 0,
+		"sobered": 0,
 	}
 	reputation = MAX_REPUTATION
 	stats_changed.emit(stats)
@@ -88,6 +90,15 @@ func register_late(pos: Vector3) -> void:
 	stats.late += 1
 	stats.combo = 0
 	feedback.emit("Atrasou!", &"late", pos)
+	stats_changed.emit(stats)
+
+
+## Salgado, água ou refri: o freguês ficou mais sóbrio (ruim pro objetivo de capotar).
+func register_sobered(pos: Vector3, food: bool) -> void:
+	stats.sobered += 1
+	if food:
+		stats.food_served += 1
+	feedback.emit("Forrou o estômago! Porre ↓" if food else "Rebateu! Porre ↓", &"late", pos + Vector3(0, 0.35, 0))
 	stats_changed.emit(stats)
 
 

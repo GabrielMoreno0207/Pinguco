@@ -87,7 +87,7 @@ func cancel(customer: Node) -> void:
 
 ## Valida uma entrega. Só é sucesso se ESTE cliente tem um pedido aberto e a bebida bate.
 func validate(customer: Node, item: HeldItem) -> Result:
-	if not item.is_served_glass():
+	if not item.is_deliverable():
 		return Result.NOT_SERVED
 	var o := get_order(customer)
 	if o == null or o.customer != customer:

@@ -8,7 +8,7 @@ var customer: CustomerController
 func get_prompt(player: PlayerController) -> String:
 	if customer == null or not customer.can_receive():
 		return ""
-	if player.held.is_served_glass():
+	if player.held.is_deliverable():
 		return "Entregar %s para %s" % [player.held.beverage.display_name, customer.nickname]
 	return ""
 

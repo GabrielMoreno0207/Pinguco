@@ -18,6 +18,11 @@ const ABSURD := ["cadê meu cavalo?", "o chão tá mexendo", "eu te amo, cara", 
 	"cê é meu melhor amigo", "o banquinho fugiu", "zzz... hã?", "eu sou o rei do pagode"]
 const CONTEXT_LINES := ["Mais uma daquela!", "O mesmo de antes, patrão!", "Repete a dose!",
 	"Aquela lá de novo!"]
+## Pedidos de salgado quando o perfil não tem frases próprias.
+const FOOD_TEMPLATES := ["Tô com uma fome... me vê {pedido}!", "Patrão, {pedido} pra forrar o estômago!",
+	"Bateu a larica: {pedido}, por favor!", "Me vê {pedido} que o estômago tá roncando!"]
+## Fome (0..1) a partir da qual o freguês pode pedir salgado.
+const HUNGRY_AT := 0.6
 
 
 static func fraction(level: float, tolerance: float) -> float:
@@ -36,12 +41,15 @@ static func stage_for(level: float, tolerance: float) -> int:
 ## Retorna {"text": String, "clues": {"color","letter","symbol"}: bool, "stage": int}.
 static func compose_order(profile: CustomerProfile, bev: BeverageData, stage: int,
 		last_bev: StringName, rng: RandomNumberGenerator) -> Dictionary:
-	var uses_context := last_bev == bev.id and stage >= Stage.TIPSY and rng.randf() < 0.4
+	var uses_context := not bev.is_food() and last_bev == bev.id and stage >= Stage.TIPSY and rng.randf() < 0.4
 	var text := ""
 	if uses_context:
 		text = _pick(CONTEXT_LINES, rng)
 	else:
-		var template: String = _pick(profile.order_templates, rng)
+		var templates: PackedStringArray = profile.order_templates
+		if bev.is_food():
+			templates = profile.food_templates if not profile.food_templates.is_empty() else PackedStringArray(FOOD_TEMPLATES)
+		var template: String = _pick(templates, rng)
 		var name_part := _name_for_stage(bev, stage, rng)
 		var article := "" if stage >= Stage.DRUNK else bev.article + " "
 		text = template.replace("{pedido}", article + name_part).replace("{bebida}", name_part)
@@ -134,6 +142,9 @@ static func _clues_for_stage(stage: int, uses_context: bool, rng: RandomNumberGe
 		var tmp: String = shuffled[i]
 		shuffled[i] = shuffled[j]
 		shuffled[j] = tmp
+	if count == 1 and shuffled[0] == "color":
+		# com tantas bebidas, só a cor fica ambígua demais: a pista única é letra ou símbolo
+		shuffled.reverse()
 	var clues := {"color": false, "letter": false, "symbol": false}
 	for i in count:
 		clues[shuffled[i]] = true

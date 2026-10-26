@@ -2,7 +2,7 @@ class_name CustomerProfile
 extends Resource
 ## Perfil configurável de freguês. Novos perfis são adicionados no CustomerDatabase.
 
-enum Body { TIOZAO, VALENTAO, FALANTE, FOFOQUEIRA }
+enum Body { TIOZAO, VALENTAO, FALANTE, FOFOQUEIRA, UNIVERSITARIO, MALANDRO }
 
 @export var id: StringName = &""
 @export var archetype: String = ""
@@ -15,6 +15,8 @@ enum Body { TIOZAO, VALENTAO, FALANTE, FOFOQUEIRA }
 @export var shirt_color: Color = Color.WHITE
 @export var pants_color: Color = Color(0.2, 0.25, 0.45)
 @export var hair_color: Color = Color(0.15, 0.1, 0.08)
+## Variações de roupa sorteadas por freguês (vazio = usa shirt_color).
+@export var shirt_variants: PackedColorArray = []
 
 ## Comportamento
 ## Pontos de embriaguez até capotar.
@@ -35,6 +37,8 @@ enum Body { TIOZAO, VALENTAO, FALANTE, FOFOQUEIRA }
 @export var voice_pitch: float = 1.0
 ## Gorjeta base.
 @export var tip: int = 2
+## Quanto a fome sobe a cada bebida (fome alta = pede salgado, que corta o porre).
+@export var hunger_rate: float = 0.25
 
 ## Bebidas preferidas: id -> peso.
 @export var favorites: Dictionary = {}
@@ -42,6 +46,8 @@ enum Body { TIOZAO, VALENTAO, FALANTE, FOFOQUEIRA }
 ## Falas
 @export var greetings: PackedStringArray = []
 @export var order_templates: PackedStringArray = []
+## Pedidos de salgado (fome). Vazio = usa as frases genéricas do DrunkennessSystem.
+@export var food_templates: PackedStringArray = []
 @export var chatter_lines: PackedStringArray = []
 @export var happy_lines: PackedStringArray = []
 @export var wrong_lines: PackedStringArray = []

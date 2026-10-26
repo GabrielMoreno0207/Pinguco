@@ -44,8 +44,8 @@ static func toon(color: Color, outline := true, rough := 0.8, emission := 0.0) -
 	return m
 
 
-static func glass(color: Color, alpha := 0.35) -> StandardMaterial3D:
-	var key := "glass|%s|%s" % [color.to_html(), alpha]
+static func glass(color: Color, alpha := 0.35, outline := false) -> StandardMaterial3D:
+	var key := "glass|%s|%s|%s" % [color.to_html(), alpha, outline]
 	if _cache.has(key):
 		return _cache[key]
 	var m := StandardMaterial3D.new()
@@ -56,6 +56,8 @@ static func glass(color: Color, alpha := 0.35) -> StandardMaterial3D:
 	m.rim_enabled = true
 	m.rim = 0.8
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if outline:
+		m.next_pass = outline_mat()
 	_cache[key] = m
 	return m
 

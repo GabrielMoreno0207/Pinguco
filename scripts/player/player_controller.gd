@@ -126,6 +126,9 @@ func discard_held() -> void:
 		HeldItem.Kind.GLASS:
 			AudioManager.play_at("glass_break" if held.filled else "clink", global_position, 1.0, -4.0)
 			set_held(HeldItem.empty())
+		HeldItem.Kind.FOOD:
+			AudioManager.play_at("thud", global_position, 1.6, -10.0)
+			set_held(HeldItem.empty())
 
 
 func look_dir() -> Vector3:

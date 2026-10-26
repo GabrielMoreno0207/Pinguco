@@ -11,6 +11,8 @@ enum State { ENTERING, GREETING, THINKING, ORDERING, DRINKING, PASSING_OUT, ASLE
 const WALK_SPEED := 1.6
 const SLEEP_TIME := 7.0
 const PASS_OUT_BONUS := 15
+const EAT_LINES := ["Hmm, forrou o bucho!", "Agora sim, deu uma rebatida!", "Ufa, voltei pro prumo!",
+	"Que salgado, hein? Fiquei novo!"]
 
 var profile: CustomerProfile
 var nickname := ""
@@ -21,6 +23,8 @@ var hitbox: CustomerHitbox
 var state: State = State.ENTERING
 
 var drunk_level := 0.0
+## Fome 0..1: sobe a cada bebida alcoólica; alta = pede salgado (que corta o porre).
+var hunger := 0.0
 var last_beverage: StringName = &""
 var strikes := 0
 var drinks := 0
@@ -53,6 +57,7 @@ var _zzz_timer := 0.0
 var _drink_glass: Node3D
 var _drink_anim := 0.0
 var _wake_anim := 0.0
+var _eating := false
 
 
 func setup(p: CustomerProfile, nick: String, s: Seat, orders: OrderSystem, entry: Array[Vector3], exit: Array[Vector3]) -> void:
@@ -71,7 +76,7 @@ func _ready() -> void:
 	rig = CustomerRig.new()
 	rig.name = "Rig"
 	add_child(rig)
-	rig.build(profile)
+	rig.build(profile, hash(nickname))
 	hitbox = CustomerHitbox.new()
 	hitbox.customer = self
 	hitbox.highlight_root = rig
@@ -218,8 +223,22 @@ func _pick_beverage() -> StringName:
 	return all[0]
 
 
+## Com fome, às vezes pede salgado em vez de bebida.
+func _pick_order_item() -> StringName:
+	var foods := BeverageDatabase.food_ids()
+	# a larica só bate depois que o freguês já está alegre
+	if not foods.is_empty() and is_hungry() and stage() >= DrunkennessSystem.Stage.TIPSY \
+			and _rng.randf() < 0.3 + (hunger - DrunkennessSystem.HUNGRY_AT) * 1.5:
+		return foods[_rng.randi_range(0, foods.size() - 1)]
+	return _pick_beverage()
+
+
+func is_hungry() -> bool:
+	return hunger >= DrunkennessSystem.HUNGRY_AT
+
+
 func _place_order() -> void:
-	var bev := _pick_beverage()
+	var bev := _pick_order_item()
 	var patience := profile.patience * (1.0 - stage() * 0.08)
 	var order := order_system.create_order(self, bev, patience)
 	state = State.ORDERING
@@ -242,6 +261,8 @@ func _update_ordering(delta: float) -> void:
 			_bang = 1.0
 	if not _fickle_checked and _state_timer <= 0.0:
 		_fickle_checked = true
+		if BeverageDatabase.get_beverage(order.beverage_id).is_food():
+			return # fome não muda de ideia
 		if stage() >= DrunkennessSystem.Stage.DRUNK and _rng.randf() < profile.fickleness * 2.0:
 			var new_bev := _pick_beverage()
 			if new_bev != order.beverage_id:
@@ -280,7 +301,10 @@ func receive(player: PlayerController) -> void:
 			drinks += 1
 			AudioManager.play("correct")
 			AudioManager.play("coin", 1.0, -6.0)
-			_start_drink(bev)
+			if bev.is_food():
+				_start_eat(bev)
+			else:
+				_start_drink(bev)
 		OrderSystem.Result.WRONG_DRINK, OrderSystem.Result.NO_ORDER:
 			strikes += 1
 			_angry = 1.0
@@ -308,11 +332,38 @@ func _start_drink(bev: BeverageData) -> void:
 	_drink_glass.position = Vector3(0, -0.02, -0.05)
 	rig.hand_r.add_child(_drink_glass)
 	drunk_level = maxf(0.0, drunk_level + bev.strength * profile.sensitivity)
+	if bev.strength > 0.0:
+		hunger = minf(hunger + profile.hunger_rate * (1.0 + stage() * 0.25), 1.0)
+	else:
+		GameManager.register_sobered(head_position(), false)
+
+
+## Salgado: mata a fome e derruba a embriaguez.
+func _start_eat(food: BeverageData) -> void:
+	state = State.DRINKING
+	_state_timer = 1.9
+	_drink_anim = 0.0
+	_happy = 1.0
+	_eating = true
+	bubble_timer = 0.0
+	_drink_glass = Node3D.new()
+	BeverageModels.build_snack(_drink_glass, food, Vector3(0, -0.02, -0.06))
+	_drink_glass.scale = Vector3.ONE * 1.3
+	rig.hand_r.add_child(_drink_glass)
+	drunk_level = maxf(0.0, drunk_level + food.strength * profile.sensitivity)
+	hunger = 0.0
+	GameManager.register_sobered(head_position(), true)
+	AudioManager.play_at("thud", head_position(), 2.2, -12.0)
 
 
 func _finish_drink() -> void:
 	if is_instance_valid(_drink_glass):
 		_drink_glass.queue_free()
+	if _eating:
+		_eating = false
+		say(_line(EAT_LINES), &"happy", 2.0)
+		_enter_thinking()
+		return
 	_flush = 0.6
 	if drunk_level >= profile.tolerance:
 		_pass_out()
@@ -502,6 +553,28 @@ func _profile_gestures(arm_l: Vector3, arm_r: Vector3, st: int) -> void:
 				arm_l = Vector3(2.4, 0, 0.55) # mão na boca: "não conta pra ninguém"
 			elif _happy > 0.3:
 				arm_r = Vector3(1.9 + sin(_t * 10.0) * 0.2, 0, 0.0)
+			else:
+				# abanando o leque ("ai, que calor!")
+				arm_l = Vector3(1.9, 0, 0.35 + sin(_t * 9.0) * 0.25)
+		CustomerProfile.Body.UNIVERSITARIO:
+			if not talking and _happy < 0.3:
+				# olhando o celular
+				arm_l = Vector3(1.75, 0, 0.45)
+				rig.head.rotation.x += 0.35
+			elif talking:
+				arm_r = Vector3(1.5 + sin(_t * 8.0) * 0.3, 0, 0.2)
+		CustomerProfile.Body.MALANDRO:
+			if _happy > 0.3 and rig.hat:
+				# levanta o chapéu: "categoria!"
+				arm_r = Vector3(2.9, 0, 0.3)
+				rig.hat.position.y = 0.3875 + sin(_happy * PI) * 0.06
+			else:
+				# batucando o samba no balcão
+				arm_r = Vector3(1.05 + absf(sin(_t * 7.0)) * 0.25, 0, 0.08)
+				if rig.hat:
+					rig.hat.position.y = 0.3875
+	if is_hungry() and not talking and _happy < 0.3 and profile.body != CustomerProfile.Body.UNIVERSITARIO:
+		arm_l = Vector3(0.75, 0, 0.75 + sin(_t * 4.0) * 0.1) # mão na barriga: tá com fome
 	if _wake_anim > 0.0:
 		arm_l = Vector3(2.6, 0, -0.6)
 		arm_r = Vector3(2.6, 0, 0.6)

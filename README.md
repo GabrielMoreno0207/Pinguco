@@ -38,14 +38,20 @@ godot --path pinguco
 3. Pegue o copo pronto e entregue (E) ao **freguês certo**.
 4. Cada dose aumenta a embriaguez **daquele** freguês. Ao chegar no limite, ele capota, dorme
    e depois vai embora, liberando a banqueta.
+5. Sobre a cabeça de cada freguês fica um **bafômetro** (4 faixas, de Sóbrio a Chumbado) e um
+   ícone de **fome**. Cada bebida alcoólica dá fome. Quando a coxinha do ícone fica laranja
+   com "!", ele já está alegre e pode pedir um **salgado** da estufa (coxinha ou pastel).
+   Atender **corta o porre**, e o bafômetro pisca em azul. Deixar estourar a paciência conta
+   como vacilo. Água e refrigerante também "rebatem".
 
 O cardápio de giz na parede atrás do balcão mostra cor, letra, símbolo e preço de cada bebida.
 
 ## Testes automatizados
 
 ```bash
-# headless: 42 verificações de ponta a ponta (movimento, raycast, preparo, entrega,
-# validação, atraso, embriaguez individual, capotar, liberar banqueta, fim de turno)
+# headless: 47 verificações de ponta a ponta (movimento, raycast, preparo, entrega,
+# validação, atraso, embriaguez individual, fome/salgados, capotar, liberar banqueta,
+# fim de turno)
 godot --headless --path pinguco -- --autotest
 
 # com janela, salvando screenshots em user://shots
@@ -53,6 +59,9 @@ godot --path pinguco -- --autotest --shots
 
 # benchmark de FPS
 godot --path pinguco -- --bench
+
+# vitrine: garrafas, fichas e os 6 fregueses (sóbrios e bêbados) em user://shots/gallery_*
+godot --path pinguco -- --gallery
 ```
 
 Outras opções: `-- --low` força o modo leve e `-- --high` força o modo completo.
@@ -71,10 +80,27 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
 - **Interação**: raycast da câmera, destaque pulsante em amarelo no objeto mirado, prompt
   com a ação ("Pegar Cerveja", "Segure: Amassando o limão"), dicas quando a ação não é
   possível e anel de progresso na mira.
-- **6 bebidas** em um banco central (`BeverageDatabase`), cada uma com nome, cor, letra,
-  símbolo, modelo 3D (long neck, garrafa, jarra ou lata), tempo de preparo, força, preço e
-  gírias. Os símbolos (estrela, losango, círculo, limão, coração e raio) usam o mesmo
-  polígono no HUD e em 3D.
+- **12 bebidas + 2 salgados** em um banco central (`BeverageDatabase`): Cerveja, Pinga,
+  Vinho, Caipirinha, Batida, Refrigerante, Quentão, Whisky, Tequila, Gin Tônica, Jurubeba e
+  Água, mais Coxinha e Pastel. Cada item tem nome, cor, letra, símbolo, modelo 3D, tempo de
+  preparo, força, preço e gírias. Os 14 símbolos (estrela, losango, círculo, limão, coração,
+  raio, chama, coroa, sol, lua, gota, folha, coxinha e pastel) usam o mesmo polígono no HUD e
+  em 3D. No HUD eles têm sombra, brilho e detalhes desenhados; em 3D, borda exata
+  (`Geometry2D.offset_polygon`).
+- **Garrafas por revolução (lathe)**: ombro e gargalo suaves, gerados a partir de um perfil.
+  Os modelos incluem:
+  - long neck com tampinha;
+  - garrafa de cachaça com rolha;
+  - garrafa de vinho com cápsula;
+  - garrafa quadrada de importado com selo;
+  - jarra com alça, gelo e limão;
+  - panela de quentão no fogareiro;
+  - lata;
+  - pratinho de salgado.
+
+  O rótulo tem listras na cor da bebida, um medalhão com o símbolo e a letra, e acompanha a
+  curva do vidro. Cada bebida tem seu enfeite no copo (colarinho, gelo, sal e limão, canela,
+  canudinho...).
 - **Pedidos**: balões de fala projetados sobre a cabeça do freguês, com texto, ficha da
   bebida com as pistas visíveis e barra de paciência. A entrega só é válida se for **este**
   freguês, com pedido aberto e a bebida certa. Entregar ao freguês errado conta como erro e
@@ -91,15 +117,34 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   - Além do texto: pálpebras caindo, olhos vesgos, bochechas e nariz vermelhos, balanço do
     corpo, soluços, voz mais grave e arrastada, pedidos mais rápidos e imprevisíveis (o
     freguês às vezes muda de ideia ou pede qualquer coisa).
-- **4 perfis de freguês** (`CustomerDatabase`), cada um com visual, falas, tolerância,
-  sensibilidade, paciência, ritmo, número de vacilos tolerados, gorjeta, bebidas favoritas e
-  gestos próprios:
-  - **O Tiozão**: careca de bigode, barrigão que balança na risada, tolerância alta.
-  - **O Valentão**: boné pra trás, corrente de ouro e monocelha. Impaciente, soca o
-    balcão.
-  - **O Falante**: topete, óculos e camisa estampada. Gesticula sem parar e muda de ideia.
-  - **A Fofoqueira**: cabelão cacheado, pérolas e batom. Põe a mão na boca para fofocar e
-    é fraca para bebida.
+- **6 perfis de freguês** (`CustomerDatabase`), cada um com visual, falas, tolerância,
+  sensibilidade, paciência, ritmo, número de vacilos tolerados, gorjeta, ritmo de fome,
+  bebidas favoritas e gestos próprios. Os bonecos têm pescoço e queixo, mãos com dedão e
+  dedos, olhos com íris colorida, pupila e brilho, sobrancelhas grossas, boca com dentes e
+  língua, orelhas com parte interna, roupas com detalhes e calçados próprios. Cada freguês
+  **sorteia** tom de pele, cor da roupa, cor dos olhos e proporções (com semente no
+  apelido).
+  - **O Tiozão**: regata, careca brilhante, bigodão, caneta na orelha, palito, cordão,
+    bermuda e chinelo. Tolerância alta, barrigão que balança na risada.
+  - **O Valentão**: braços de academia, tatuagem "MÃE", cicatriz, boné pra trás, brinco,
+    corrente e coturno. Impaciente, soca o balcão.
+  - **O Falante**: camisa havaiana com gola, botões, bolso e caneta, além de topete e óculos
+    com lente. Gesticula sem parar e muda de ideia.
+  - **A Fofoqueira**: bobes no cabelão, cílios, pinta, batom, pérolas, saia rodada, bolsa e
+    leque. Se abana, põe a mão na boca para fofocar e é fraca para bebida.
+  - **O Universitário** (novo): moletom com capuz e cordinhas, mochila, touca, cavanhaque,
+    olheiras, fone e celular aceso na mão. Duro, fraco e sempre com fome.
+  - **O Malandro** (novo): chapéu panamá, camisa listrada, bigodinho fino, sapato bicolor e
+    anel. Batuca samba no balcão, tira o chapéu quando gosta e aguenta muito.
+- **Bafômetro sobre a cabeça** (`StatusTag`): sempre visível com o freguês no bar. Mostra
+  uma carinha com a cor do estágio, a barra de 4 faixas, o marcador animado e o ícone de
+  fome. O painel do freguês mirado mostra também a fome (●●●○○).
+- **Fome e salgados**: cada bebida alcoólica soma `hunger_rate` (mais rápido quando
+  bêbado). Com fome **e** já alegre, o freguês pode pedir coxinha ou pastel com frases
+  próprias ("Mestre, tem coxinha? Não almocei..."). O pedido também é distorcido pela
+  bebedeira. O salgado vem pronto da estufa (sem copo): o jogador pega e entrega. Ao comer,
+  o freguês zera a fome e a embriaguez **cai**, o que é ruim para o objetivo de fazê-lo
+  capotar. Com fome, ele põe a mão na barriga.
 - **Capotar**: cabeça cai no balcão com quique, "tum", tremida de câmera, Zs flutuando e
   ronco. Aparece um banner engraçado ("Tio Valdir capotou contando a piada do pavê!"). Depois
   o freguês acorda assustado e sai cambaleando.
@@ -126,12 +171,14 @@ scripts/
   systems/     BeverageDatabase*, CustomerDatabase*, GameManager*, AudioManager*  (*autoload)
                OrderSystem, DrunkennessSystem, CustomerSpawner, ShiftManager
   player/      PlayerController, InteractionSystem, Hands
-  interaction/ Interactable (base), BottleDispenser, GlassStack, PrepStation, TrashBin, HeldItem
+  interaction/ Interactable (base), BottleDispenser, GlassStack, PrepStation, SnackTray,
+               TrashBin, HeldItem
   customers/   CustomerController, CustomerRig, CustomerHitbox, Seat
-  ui/          HUDController, SpeechBubble, BeverageChip, Crosshair, DrunkMeter, StarRow, UiTheme
+  ui/          HUDController, SpeechBubble, StatusTag, BeverageChip, Crosshair, DrunkMeter,
+               StarRow, UiTheme
   visual/      Mats (toon + contorno), SymbolShapes, BeverageModels
   world/       BarBuilder, BarShaders
-  tests/       auto_test.gd, bench.gd
+  tests/       auto_test.gd, bench.gd, gallery.gd
 ```
 
 - Os sistemas se comunicam por **sinais**. O HUD escuta `GameManager`, `ShiftManager` e
@@ -158,8 +205,15 @@ scripts/
   que facilita reagir à embriaguez em tempo real.
 - **Fluxo de preparo** com 3 etapas (copo → servir segurando E → entregar). Isso dá o
   "trabalho de bar" sem virar menu. A garrafa volta sozinha para evitar tédio.
-- **Refrigerante "rebate"**: tem força negativa e baixa um pouco a embriaguez. É um detalhe
-  de humor e de estratégia.
+- **Refrigerante e água "rebatem"**: têm força negativa e baixam um pouco a embriaguez. É um
+  detalhe de humor e de estratégia.
+- **Salgados reaproveitam `BeverageData`** (`category = FOOD`, força negativa). Pedido,
+  validação, pistas, ficha e distorção funcionam iguais, sem código duplicado.
+  `BeverageDatabase.drinks()` e `foods()` separam os dois onde importa (garrafas,
+  preferências). O salgado é um **dilema**: atender corta o porre, recusar gera vacilo e
+  pode fazer o freguês ir embora bravo.
+- **Com 12 cores, a cor sozinha fica ambígua**. Por isso, quando um pedido "Chumbado" mostra
+  só 1 pista, ela é sempre letra ou símbolo, nunca só a cor.
 - **Renderer de compatibilidade (OpenGL 3.3)**. A máquina de desenvolvimento tem uma
   GeForce 210, sem Vulkan e sem D3D12. No renderer de compatibilidade, o jogo ativa um
   **modo leve** automaticamente:
@@ -181,7 +235,8 @@ scripts/
 - Há um único turno/cenário, sem progressão entre noites nem save.
 - Não há opções de sensibilidade do mouse, volume ou acessibilidade na interface (os
   valores ficam nos `@export` do `PlayerController` e nos buses do `AudioManager`).
-- Na GT 210 o jogo roda a ~25–30 FPS. A física ainda é estável, mas o ideal é uma GPU mais
+- Na GT 210 o jogo roda a ~24–28 FPS (os bonecos e as garrafas mais detalhados custaram ~2
+  FPS). A física ainda é estável, mas o ideal é uma GPU mais
   recente.
 
 ## Próximas melhorias prioritárias
@@ -191,7 +246,8 @@ scripts/
 3. Áudio real (vozes gravadas, foley) no lugar dos placeholders. A arquitetura já carrega
    por nome.
 4. Progressão: várias noites, upgrades do bar, novos fregueses (o Bebum Filósofo, o
-   Turista) e bebidas misturadas (receitas com 2 garrafas).
+   Turista), bebidas misturadas (receitas com 2 garrafas) e salgados que precisam ser
+   fritos.
 5. Eventos de caos: jogo na TV (todo mundo pede ao mesmo tempo), queda de energia, fiscal.
 6. Visual: texturas pintadas à mão, partículas (espuma, respingos) e luz baked para GPUs
    fracas.

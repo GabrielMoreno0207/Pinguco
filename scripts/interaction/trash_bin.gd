@@ -21,7 +21,7 @@ static func create() -> TrashBin:
 
 func get_prompt(player: PlayerController) -> String:
 	match player.held.kind:
-		HeldItem.Kind.GLASS:
+		HeldItem.Kind.GLASS, HeldItem.Kind.FOOD:
 			return "Jogar fora"
 		HeldItem.Kind.BOTTLE:
 			return "Devolver %s" % player.held.beverage.display_name

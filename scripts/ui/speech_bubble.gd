@@ -2,7 +2,8 @@ class_name SpeechBubble
 extends Control
 ## Balão de fala ancorado na cabeça de um freguês (projeção 3D → tela).
 ## Mostra o texto (distorcido conforme a bebedeira), a ficha da bebida com as pistas
-## visíveis e a paciência restante.
+## visíveis e a paciência restante. Embaixo do balão fica a StatusTag (bafômetro + fome),
+## sempre visível enquanto o freguês está no bar.
 
 var customer: CustomerController
 var _panel: PanelContainer
@@ -15,11 +16,14 @@ var _shown_kind: StringName = &""
 var _style_cache: Dictionary = {}
 var _pop := 0.0
 var _fill := StyleBoxFlat.new()
+var _tag: StatusTag
 
 
 func _init(c: CustomerController) -> void:
 	customer = c
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tag = StatusTag.new(c)
+	add_child(_tag)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_panel)
@@ -67,11 +71,24 @@ func _process(delta: float) -> void:
 		text = order.text
 		kind = &"order"
 	var head := customer.head_position()
-	if text == "" or cam.is_position_behind(head):
+	if cam.is_position_behind(head):
 		visible = false
-		_shown_text = ""
 		return
 	visible = true
+	# posição: acima da cabeça, escala com a distância
+	var screen := cam.unproject_position(head)
+	var dist := cam.global_position.distance_to(head)
+	var s := clampf(2.2 / maxf(dist, 0.5), 0.55, 1.15)
+	_tag.visible = customer.state not in [CustomerController.State.ENTERING, CustomerController.State.LEAVING, CustomerController.State.ANGRY_LEAVING]
+	_tag.scale = Vector2.ONE * s
+	_tag.position = screen - Vector2(StatusTag.SIZE.x / 2.0, StatusTag.SIZE.y)
+	var tag_h := (StatusTag.SIZE.y + 8.0) * s if _tag.visible else 0.0
+	if text == "":
+		_panel.visible = false
+		_shown_text = ""
+		queue_redraw()
+		return
+	_panel.visible = true
 	if text != _shown_text or kind != _shown_kind:
 		_shown_text = text
 		_shown_kind = kind
@@ -88,10 +105,6 @@ func _process(delta: float) -> void:
 		var pf := order.patience_fraction()
 		_patience.value = pf
 		_fill.bg_color = UiTheme.GREEN.lerp(UiTheme.RED, 1.0 - pf)
-	# posição: acima da cabeça, escala com a distância
-	var screen := cam.unproject_position(head)
-	var dist := cam.global_position.distance_to(head)
-	var s := clampf(2.2 / maxf(dist, 0.5), 0.55, 1.15)
 	_pop = maxf(_pop - delta * 4.0, 0.0)
 	var pop_scale := 1.0 + sin(_pop * PI) * 0.15
 	var stage := customer.stage()
@@ -101,12 +114,12 @@ func _process(delta: float) -> void:
 	_panel.pivot_offset = Vector2(_panel.size.x / 2.0, _panel.size.y)
 	_panel.scale = Vector2.ONE * s * pop_scale
 	_panel.rotation = wobble
-	_panel.position = screen - Vector2(_panel.size.x / 2.0, _panel.size.y + 18.0)
+	_panel.position = screen - Vector2(_panel.size.x / 2.0, _panel.size.y + 18.0 + tag_h)
 	queue_redraw()
 
 
 func _draw() -> void:
-	if not visible or _shown_text == "":
+	if not visible or _shown_text == "" or not _panel.visible:
 		return
 	# rabinho do balão apontando para a cabeça
 	var base := _panel.position + Vector2(_panel.size.x / 2.0, _panel.size.y)

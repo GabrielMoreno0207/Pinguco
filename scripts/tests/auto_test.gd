@@ -56,9 +56,19 @@ func _run() -> void:
 	spawner.stop() # controlamos os fregueses manualmente
 	await wait(0.3)
 	check(GameManager.is_playing(), "turno iniciou (estado PLAYING)")
-	check(BeverageDatabase.all().size() == 6, "6 bebidas registradas")
-	for bev in BeverageDatabase.all():
-		check(bar.dispensers.has(bev.id), "dispenser no cenário: %s" % bev.display_name)
+	check(BeverageDatabase.drinks().size() >= 12, "%d bebidas registradas" % BeverageDatabase.drinks().size())
+	check(BeverageDatabase.foods().size() >= 2, "salgados registrados")
+	var all_drinks_placed := true
+	for bev in BeverageDatabase.drinks():
+		if not bar.dispensers.has(bev.id):
+			all_drinks_placed = false
+			print("     sem dispenser: ", bev.id)
+	check(all_drinks_placed, "toda bebida tem garrafa no cenário")
+	var all_foods_placed := true
+	for food in BeverageDatabase.foods():
+		all_foods_placed = all_foods_placed and bar.snack_trays.has(food.id)
+	check(all_foods_placed, "todo salgado tem bandeja na estufa")
+	check(CustomerDatabase.all().size() >= 6, "%d tipos de freguês" % CustomerDatabase.all().size())
 	check(bar.seats.size() >= 3, "pelo menos 3 posições de cliente")
 
 	# ---------------------------------------------------------------- movimento
@@ -87,6 +97,19 @@ func _run() -> void:
 	await wait(0.25)
 	check(player.interaction.focused == bar.glass_stacks[0], "mirar nos copos foca a pilha de copos")
 	await shot("03_aim_glasses")
+	if shots:
+		var keep_pos := player.global_position
+		player.global_position = Vector3(-0.9, 0.05, -1.2)
+		_aim_at(player, Vector3(-0.9, 1.35, -2.45))
+		await wait(0.3)
+		await shot("03b_shelves")
+		player.global_position = Vector3(2.6, 0.05, -1.0)
+		_aim_at(player, bar.snack_trays.values()[0].global_position)
+		await wait(0.3)
+		await shot("03c_snacks")
+		player.global_position = keep_pos
+		_aim_at(player, bar.glass_stacks[0].global_position + Vector3(0, 0.1, 0))
+		await wait(0.25)
 	await _press_interact()
 	await wait(0.1)
 	check(player.held.is_empty_glass(), "tecla E pega um copo")
@@ -165,6 +188,32 @@ func _run() -> void:
 	await wait(0.3)
 	check(GameManager.stats.late >= 1, "pedido atrasado detectado")
 
+	# ---------------------------------------------------------------- fome e salgados
+	check(main.hud.find_children("*", "StatusTag", true, false).size() >= 3, "bafômetro sobre a cabeça de cada freguês")
+	player.set_held(HeldItem.empty())
+	player.interaction.force_interact(bar.snack_trays[&"coxinha"])
+	check(player.held.is_food() and player.held.beverage.id == &"coxinha", "pega coxinha na estufa")
+	orders.cancel(falante)
+	falante.state = CustomerController.State.ORDERING
+	orders.create_order(falante, &"coxinha", 30.0)
+	falante.drunk_level = 50.0
+	falante.hunger = 1.0
+	var food_text := orders.get_order(falante).text
+	falante.receive(player)
+	check(GameManager.stats.food_served == 1, "salgado entregue (pedido: \"%s\")" % food_text)
+	check(falante.drunk_level < 50.0, "salgado corta o porre (%.0f → %.1f)" % [50.0, falante.drunk_level])
+	check(falante.hunger == 0.0, "salgado mata a fome")
+	check(tiozao.hunger > 0.0 or tiozao.drinks == 0 or BeverageDatabase.get_beverage(tiozao.last_beverage).strength <= 0.0, "bebida alcoólica dá fome")
+	var hungry_test := CustomerController.new()
+	hungry_test.profile = CustomerDatabase.get_profile(&"universitario")
+	hungry_test.hunger = 1.0
+	hungry_test.drunk_level = hungry_test.profile.tolerance * 0.3 # alegre: a larica já bateu
+	var got_food := false
+	for k in 30:
+		got_food = got_food or BeverageDatabase.get_beverage(hungry_test._pick_order_item()).is_food()
+	check(got_food, "freguês com fome pede salgado")
+	hungry_test.free()
+
 	# ---------------------------------------------------------------- progressão até capotar
 	print("  -- pedidos do Tiozão conforme bebe:")
 	var stages_seen := {}
@@ -179,7 +228,8 @@ func _run() -> void:
 		var o := orders.get_order(tiozao)
 		stages_seen[o.stage] = true
 		print("     [%s] \"%s\"  pistas=%s  (bebida real: %s)" % [DrunkennessSystem.STAGE_NAMES[o.stage], o.text, _clue_str(o.clues), o.beverage_id])
-		player.set_held(HeldItem.glass(BeverageDatabase.get_beverage(o.beverage_id)))
+		var ob := BeverageDatabase.get_beverage(o.beverage_id)
+		player.set_held(HeldItem.food(ob) if ob.is_food() else HeldItem.glass(ob))
 		tiozao.receive(player)
 		if o.stage >= 2 and not stages_seen.has(&"shot_drunk"):
 			stages_seen[&"shot_drunk"] = true
@@ -211,6 +261,8 @@ func _run() -> void:
 	var prof := CustomerDatabase.get_profile(&"falante")
 	var all_ok := true
 	for b in BeverageDatabase.all():
+		if b.is_food():
+			continue
 		for st in 4:
 			for k in 20:
 				var r := DrunkennessSystem.compose_order(prof, b, st, &"", rng)

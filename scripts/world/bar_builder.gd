@@ -16,6 +16,7 @@ const PREP_XS := [-1.6, 0.0, 1.6]
 
 var seats: Array[Seat] = []
 var dispensers: Dictionary = {} # bev id -> BottleDispenser
+var snack_trays: Dictionary = {} # food id -> SnackTray
 var prep_stations: Array[PrepStation] = []
 var glass_stacks: Array[GlassStack] = []
 var sink: TrashBin
@@ -218,16 +219,13 @@ func _build_snack_case(pos: Vector3) -> void:
 	Mats.box(n, Vector3(0.75, 0.03, 0.55), Vector3(0, 0.43, 0), Color(0.75, 0.75, 0.78))
 	var lamp := Mats.box(n, Vector3(0.6, 0.02, 0.04), Vector3(0, 0.41, 0), Color(1.0, 0.8, 0.5), false)
 	lamp.material_override = Mats.toon(Color(1.0, 0.75, 0.4), false, 0.5, 2.5)
-	# coxinhas e pastéis
-	for i in 6:
-		var x := -0.25 + (i % 3) * 0.25
-		var z := -0.1 + (i / 3) * 0.2
-		if i % 2 == 0:
-			var cox := Mats.sphere(n, 0.055, Vector3(x, 0.1, z), Color(0.85, 0.5, 0.18), false, Vector3(1.0, 0.9, 1.0))
-			Mats.cylinder(n, 0.045, 0.08, Vector3(x, 0.17, z), Color(0.85, 0.5, 0.18), false, 0.008)
-			cox.name = "Coxinha"
-		else:
-			Mats.box(n, Vector3(0.16, 0.035, 0.09), Vector3(x, 0.07, z), Color(0.95, 0.75, 0.35), false)
+	# bandejas de salgados (interativas)
+	var foods := BeverageDatabase.foods()
+	for i in foods.size():
+		var tray := SnackTray.create(foods[i])
+		tray.position = Vector3(lerpf(-0.18, 0.18, float(i) / maxf(foods.size() - 1, 1)), 0.04, 0.0)
+		n.add_child(tray)
+		snack_trays[foods[i].id] = tray
 	var tag := Mats.label3d(n, "SALGADOS", Vector3(0, 0.25, 0.28), 30, UiTheme.RED, 6)
 	tag.pixel_size = 0.0016
 
@@ -283,33 +281,33 @@ func _build_back_area() -> void:
 		add_child(g)
 		glass_stacks.append(g)
 	# bebidas da bancada (jarras preparadas na hora)
-	var counter_x := -0.55
-	for bev in BeverageDatabase.all():
+	var counter_x := -0.75
+	for bev in BeverageDatabase.drinks():
 		if bev.station == &"counter":
 			_add_dispenser(bev, Vector3(counter_x, top, z + 0.1))
-			counter_x += 0.55
+			counter_x += 0.42
 	# decoração da bancada: liquidificador, tábua com limões, caixa registradora
-	_blender(Vector3(counter_x + 0.05, top, z - 0.05))
+	_blender(Vector3(counter_x + 0.02, top, z - 0.05))
 	_lime_board(Vector3(-1.2, top, z + 0.05))
-	_register(Vector3(1.2, top, z - 0.05))
+	_register(Vector3(2.42, top, z - 0.05))
 	# prateleiras na parede do fundo
 	for i in 2:
 		var y := 1.42 + i * 0.45
 		Mats.box(self, Vector3(4.6, 0.04, 0.26), Vector3(-1.2, y, -2.47), _wood)
 		for bx in [-3.4, 1.0]:
 			Mats.box(self, Vector3(0.03, 0.12, 0.2), Vector3(bx, y - 0.07, -2.5), _wood_dark, false)
-	var shelf_x := -1.25
-	for bev in BeverageDatabase.all():
+	var shelf_x := -2.2
+	for bev in BeverageDatabase.drinks():
 		if bev.station == &"shelf":
 			_add_dispenser(bev, Vector3(shelf_x, 1.44, -2.45))
-			shelf_x += 0.6
+			shelf_x += 0.55
 	# garrafas decorativas
 	var deco := [Color(0.5, 0.3, 0.1), Color(0.2, 0.45, 0.2), Color(0.85, 0.85, 0.9), Color(0.6, 0.15, 0.1),
 		Color(0.9, 0.6, 0.1), Color(0.3, 0.2, 0.5)]
 	for i in 14:
 		var px := -3.2 + i * 0.32
 		var py := 1.44 if i % 2 == 0 else 1.89
-		if py < 1.5 and px > -1.5 and px < 0.4:
+		if py < 1.5 and px > -2.5 and px < shelf_x - 0.25:
 			continue
 		_deco_bottle(Vector3(px + randf_range(-0.05, 0.05), py, -2.48), deco[i % deco.size()])
 	_radio(Vector3(0.6, 1.91, -2.45))
@@ -453,8 +451,8 @@ func _build_fridge() -> void:
 	f.add_child(light)
 	_omni(light)
 	# bebidas geladas interativas na prateleira do meio
-	var slot := -0.22
-	for bev in BeverageDatabase.all():
+	var slot := -0.33
+	for bev in BeverageDatabase.drinks():
 		if bev.station == &"fridge":
 			var disp := BottleDispenser.create(bev)
 			disp.position = Vector3(slot, shelves[1] + 0.01, 0.12)
@@ -463,10 +461,10 @@ func _build_fridge() -> void:
 			# estoque decorativo da mesma bebida nas outras prateleiras
 			for sy: float in [shelves[0], shelves[2]]:
 				for k in 2:
-					var deco := BeverageModels.build_container(bev)
-					deco.position = Vector3(slot - 0.08 + k * 0.16, sy + 0.01, -0.05 - k * 0.05)
+					var deco := BeverageModels.build_container(bev, false)
+					deco.position = Vector3(slot - 0.06 + k * 0.12, sy + 0.01, -0.05 - k * 0.05)
 					f.add_child(deco)
-			slot += 0.44
+			slot += 0.33
 
 
 # =================================================================== cardápio de giz
@@ -477,20 +475,20 @@ func _build_menu_board() -> void:
 	add_child(n)
 	Mats.box(n, Vector3(3.2, 0.95, 0.04), Vector3.ZERO, _wood_dark)
 	Mats.box(n, Vector3(3.05, 0.82, 0.02), Vector3(0, 0, 0.02), UiTheme.CHALK, false)
-	Mats.label3d(n, "CARDÁPIO", Vector3(0, 0.3, 0.035), 64, UiTheme.MUSTARD, 0).pixel_size = 0.0022
+	Mats.label3d(n, "CARDÁPIO", Vector3(0, 0.31, 0.035), 64, UiTheme.MUSTARD, 0).pixel_size = 0.0018
 	var i := 0
 	for bev in BeverageDatabase.all():
-		var col := i % 3
-		var row := i / 3
-		var pos := Vector3(-1.1 + col * 1.05, 0.05 - row * 0.28, 0.035)
+		var col := i % 4
+		var row := i / 4
+		var pos := Vector3(-1.42 + col * 0.76, 0.15 - row * 0.15, 0.035)
 		var sym := MeshInstance3D.new()
-		sym.mesh = Mats.flat_polygon_mesh(SymbolShapes.polygon(bev.symbol), 0.07)
+		sym.mesh = Mats.flat_polygon_mesh(SymbolShapes.polygon(bev.symbol), 0.05)
 		sym.material_override = Mats.unshaded(bev.color if bev.color.get_luminance() < 0.85 else Color(0.7, 0.85, 1.0))
 		sym.position = pos
 		n.add_child(sym)
-		var l := Mats.label3d(n, "%s  %s  R$%d" % [bev.letter, bev.display_name, bev.price], pos + Vector3(0.1, 0, 0), 34, Color(0.95, 0.95, 0.9), 0)
+		var l := Mats.label3d(n, "%s  %s  R$%d" % [bev.letter, bev.display_name, bev.price], pos + Vector3(0.08, 0, 0), 34, Color(0.95, 0.95, 0.9) if not bev.is_food() else Color(1.0, 0.8, 0.5), 0)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		l.pixel_size = 0.0017
+		l.pixel_size = 0.0013
 		i += 1
 
 

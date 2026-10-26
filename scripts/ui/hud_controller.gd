@@ -27,6 +27,7 @@ var _cust_name: Label
 var _cust_type: Label
 var _cust_stage: Label
 var _cust_last: Label
+var _cust_hunger: Label
 var _meter: DrunkMeter
 var _bubbles: Control
 var _toasts: Control
@@ -242,6 +243,8 @@ func _build_customer_panel() -> void:
 	v.add_child(_cust_stage)
 	_cust_last = UiTheme.label("", 15, Color(0.45, 0.3, 0.22), false)
 	v.add_child(_cust_last)
+	_cust_hunger = UiTheme.label("", 15, Color(0.45, 0.3, 0.22), false)
+	v.add_child(_cust_hunger)
 	_customer_panel.visible = false
 
 
@@ -310,23 +313,29 @@ func _build_menu() -> void:
 		"2. Pegue a garrafa certa e SEGURE E sobre o copo para servir.\n" +
 		"3. Pegue o copo pronto e entregue (E) ao freguês certo.\n\n" +
 		"Quanto mais bêbado, mais enrolado o pedido: confie na COR, na LETRA, no SÍMBOLO\n" +
-		"e no contexto (\"mais uma daquela!\"). O cardápio fica na parede atrás de você.",
+		"e no contexto (\"mais uma daquela!\"). O cardápio fica na parede atrás de você.\n\n" +
+		"Fique de olho no BAFÔMETRO sobre cada freguês. Bebendo, ele fica com FOME e pede\n" +
+		"salgado da estufa: atender corta o porre, recusar deixa ele bravo. Água e refri também rebatem.",
 		19, UiTheme.INK, false)
 	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	how.custom_minimum_size.x = 680
 	v.add_child(how)
-	var chips := HBoxContainer.new()
-	chips.alignment = BoxContainer.ALIGNMENT_CENTER
-	chips.add_theme_constant_override("separation", 14)
-	v.add_child(chips)
+	var chips_center := CenterContainer.new()
+	v.add_child(chips_center)
+	var chips := GridContainer.new()
+	chips.columns = 7
+	chips.add_theme_constant_override("h_separation", 14)
+	chips.add_theme_constant_override("v_separation", 6)
+	chips_center.add_child(chips)
 	for bev in BeverageDatabase.all():
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 0)
 		var chip := BeverageChip.new()
-		chip.custom_minimum_size = Vector2(58, 58)
+		chip.custom_minimum_size = Vector2(54, 54)
+		chip.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		chip.setup(bev)
 		col.add_child(chip)
-		var n := UiTheme.label(bev.display_name, 14, UiTheme.INK, false)
+		var n := UiTheme.label(bev.display_name, 13, UiTheme.INK if not bev.is_food() else UiTheme.RED, false)
 		n.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		col.add_child(n)
 		chips.add_child(col)
@@ -415,6 +424,7 @@ func show_results(reason: String) -> void:
 		["Fregueses que capotaram", str(s.passed_out)],
 		["Foram embora bravos", str(s.angry_left)],
 		["Maior combo", "x%d" % s.best_combo],
+		["Salgados servidos (porre cortado)", str(s.food_served)],
 	]
 	for r in rows:
 		var h := HBoxContainer.new()
@@ -581,7 +591,8 @@ func _process(_delta: float) -> void:
 	var st := c.stage()
 	_meter.set_value(c.drunk_fraction(), st)
 	var asleep := c.state == CustomerController.State.ASLEEP
-	var key := "%s|%d|%s|%s|%d" % [c.nickname, st, asleep, c.last_beverage, c.strikes]
+	var hunger_steps := int(c.hunger * 5.0)
+	var key := "%s|%d|%s|%s|%d|%d" % [c.nickname, st, asleep, c.last_beverage, c.strikes, hunger_steps]
 	if key == _cust_cache:
 		return
 	_cust_cache = key
@@ -592,5 +603,7 @@ func _process(_delta: float) -> void:
 	_cust_stage.add_theme_color_override("font_color", DrunkennessSystem.STAGE_COLORS[st].darkened(0.25))
 	var last := BeverageDatabase.get_beverage(c.last_beverage) if c.last_beverage != &"" else null
 	_cust_last.text = "Última: %s  ·  Vacilos: %d/%d" % [last.display_name if last else "nada ainda", c.strikes, c.profile.max_strikes]
+	_cust_hunger.text = "Fome: %s%s" % ["●".repeat(hunger_steps) + "○".repeat(5 - hunger_steps), "  — vai pedir salgado!" if c.is_hungry() else ""]
+	_cust_hunger.add_theme_color_override("font_color", UiTheme.RED if c.is_hungry() else Color(0.45, 0.3, 0.22))
 	_customer_panel.reset_size()
 	_customer_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 24)

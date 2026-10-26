@@ -1,8 +1,8 @@
 class_name HeldItem
 extends RefCounted
-## O que o jogador carrega na mão: nada, uma garrafa ou um copo (vazio ou servido).
+## O que o jogador carrega na mão: nada, uma garrafa, um copo (vazio ou servido) ou um salgado.
 
-enum Kind { NONE, BOTTLE, GLASS }
+enum Kind { NONE, BOTTLE, GLASS, FOOD }
 
 var kind: Kind = Kind.NONE
 var beverage: BeverageData = null
@@ -32,6 +32,15 @@ static func glass(bev: BeverageData = null) -> HeldItem:
 	return h
 
 
+static func food(bev: BeverageData, from: Node = null) -> HeldItem:
+	var h := HeldItem.new()
+	h.kind = Kind.FOOD
+	h.beverage = bev
+	h.filled = true
+	h.source = from
+	return h
+
+
 func is_empty() -> bool:
 	return kind == Kind.NONE
 
@@ -52,10 +61,21 @@ func is_served_glass() -> bool:
 	return kind == Kind.GLASS and filled
 
 
+func is_food() -> bool:
+	return kind == Kind.FOOD
+
+
+## Pode ser entregue a um freguês (copo servido ou salgado).
+func is_deliverable() -> bool:
+	return is_served_glass() or is_food()
+
+
 func describe() -> String:
 	match kind:
 		Kind.BOTTLE:
 			return beverage.display_name
 		Kind.GLASS:
 			return "Copo de %s" % beverage.display_name if filled else "Copo vazio"
+		Kind.FOOD:
+			return beverage.display_name
 	return ""

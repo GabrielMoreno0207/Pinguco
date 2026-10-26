@@ -61,6 +61,9 @@ func show_item(item: HeldItem) -> void:
 		HeldItem.Kind.GLASS:
 			_item = BeverageModels.build_glass(item.beverage if item.filled else null)
 			_item.position = Vector3(0, -0.04, 0)
+		HeldItem.Kind.FOOD:
+			_item = BeverageModels.build_container(item.beverage, false)
+			_item.position = Vector3(0, -0.02, -0.02)
 	if _item:
 		for c in _item.find_children("*", "GeometryInstance3D", true, false):
 			(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
