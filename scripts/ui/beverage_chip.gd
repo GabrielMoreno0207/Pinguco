@@ -51,19 +51,35 @@ func _draw() -> void:
 		# hachura para indicar "cor desconhecida"
 		for i in range(-3, 4):
 			draw_line(c + Vector2(i * r * 0.28 - r * 0.4, -r * 0.6), c + Vector2(i * r * 0.28 + r * 0.4, r * 0.6), Color(0.7, 0.68, 0.64), 2.0, true)
-	var fg := UiTheme.PAPER if bg.get_luminance() < 0.55 else UiTheme.INK
+	# símbolo em estilo adesivo (miolo claro + contorno escuro), igual em qualquer fundo
+	var ink := UiTheme.INK
 	if clues.symbol:
-		var sym_center := c + (Vector2(-r * 0.36, r * 0.26) if clues.letter else Vector2.ZERO)
-		var sym_r := r * (0.46 if clues.letter else 0.64)
-		SymbolShapes.draw(self, beverage.symbol, sym_center, sym_r, fg, UiTheme.INK if fg == UiTheme.PAPER else UiTheme.PAPER, 2.0)
+		var sym_center := c + (Vector2(-r * 0.1, -r * 0.08) if clues.letter else Vector2.ZERO)
+		var sym_r := r * (0.56 if clues.letter else 0.66)
+		SymbolShapes.draw(self, beverage.symbol, sym_center, sym_r, UiTheme.PAPER, ink, maxf(r * 0.07, 1.5))
 	if clues.letter:
 		var font := UiTheme.title_font()
-		var fs := int(r * (0.98 if clues.symbol else 1.35))
 		var txt := beverage.letter
-		var ts := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
-		var pos := c + (Vector2(r * 0.12, -r * 0.05) if clues.symbol else Vector2(-ts.x / 2.0, 0)) + Vector2(0, ts.y * 0.32)
-		draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, UiTheme.INK if fg == UiTheme.PAPER else UiTheme.PAPER)
-		draw_string(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, fg)
+		if clues.symbol:
+			# selinho com a letra no canto, sobrando para fora da ficha
+			var bc := c + Vector2(r * 0.62, r * 0.6)
+			var br := r * 0.42
+			draw_circle(bc + Vector2(1.5, 2.0), br, Color(0, 0, 0, 0.3))
+			draw_circle(bc, br, UiTheme.PAPER)
+			draw_circle(bc, br - maxf(r * 0.06, 1.5), ink)
+			var fs := int(br * 1.45)
+			var ts := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+			draw_string(font, bc + Vector2(-ts.x / 2.0, fs * 0.36), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiTheme.PAPER)
+		else:
+			var fs := int(r * 1.35)
+			var ts := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+			var pos := c + Vector2(-ts.x / 2.0, fs * 0.36)
+			draw_string_outline(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(int(r * 0.16), 4), ink)
+			draw_string(font, pos, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiTheme.PAPER)
 	if not clues.letter and not clues.symbol:
 		var font := UiTheme.title_font()
-		draw_string(font, c + Vector2(-r * 0.22, r * 0.35), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, int(r), fg)
+		var fs := int(r * 1.2)
+		var ts := font.get_string_size("?", HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		var pos := c + Vector2(-ts.x / 2.0, fs * 0.36)
+		draw_string_outline(font, pos, "?", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(int(r * 0.14), 3), ink)
+		draw_string(font, pos, "?", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiTheme.PAPER)

@@ -329,7 +329,7 @@ func _start_drink(bev: BeverageData) -> void:
 	bubble_timer = 0.0
 	_drink_glass = BeverageModels.build_glass(bev)
 	_drink_glass.scale = Vector3.ONE * 1.4
-	_drink_glass.position = Vector3(0, -0.02, -0.05)
+	_drink_glass.position = rig.hold_offset()
 	rig.hand_r.add_child(_drink_glass)
 	drunk_level = maxf(0.0, drunk_level + bev.strength * profile.sensitivity)
 	if bev.strength > 0.0:
@@ -347,8 +347,9 @@ func _start_eat(food: BeverageData) -> void:
 	_eating = true
 	bubble_timer = 0.0
 	_drink_glass = Node3D.new()
-	BeverageModels.build_snack(_drink_glass, food, Vector3(0, -0.02, -0.06))
+	BeverageModels.build_snack(_drink_glass, food, Vector3.ZERO)
 	_drink_glass.scale = Vector3.ONE * 1.3
+	_drink_glass.position = rig.hold_offset() + Vector3(0, 0.06, 0)
 	rig.hand_r.add_child(_drink_glass)
 	drunk_level = maxf(0.0, drunk_level + food.strength * profile.sensitivity)
 	hunger = 0.0
@@ -496,6 +497,7 @@ func _animate(delta: float) -> void:
 		var w := sin(_t * 9.0)
 		rig.leg_l.rotation.x = w * 0.6
 		rig.leg_r.rotation.x = -w * 0.6
+		rig.set_knees(maxf(-w, 0.0) * 0.7, maxf(w, 0.0) * 0.7)
 		rig.arm_l.rotation = Vector3(-w * 0.5, 0, -0.1)
 		rig.arm_r.rotation = Vector3(w * 0.5, 0, 0.1)
 		rig.position.y = absf(sin(_t * 9.0)) * 0.05
@@ -505,6 +507,7 @@ func _animate(delta: float) -> void:
 		var leg := lerpf(0.0, 1.25, _sit_blend)
 		rig.leg_l.rotation.x = leg
 		rig.leg_r.rotation.x = leg
+		rig.set_knees(leg * 1.05, leg * 1.05)
 		# braços apoiados no balcão
 		var rest := 1.05 * _sit_blend
 		var arm_l := Vector3(rest, 0, -0.08)
@@ -586,6 +589,7 @@ func _face(st: int, f: float) -> void:
 	var asleep := state == State.ASLEEP or state == State.PASSING_OUT
 	var base_lid: float = [0.0, 0.25, 0.45, 0.62][st]
 	var lid := 1.0 if asleep else clampf(base_lid + _blink + sin(_t * 0.8) * 0.06 * st - _angry * 0.15 - _wake_anim, 0.0, 1.0)
+	rig.set_expression(_happy, _angry, f)
 	rig.set_eyelids(lid)
 	# sobrancelhas: bravo = franzidas; bêbado = arqueadas e tortas
 	var brow_angle := _angry * 0.45 - _happy * 0.15 + (sin(_t * 1.1) * 0.12 * st if st >= 2 else 0.0)

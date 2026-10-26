@@ -60,7 +60,8 @@ godot --path pinguco -- --autotest --shots
 # benchmark de FPS
 godot --path pinguco -- --bench
 
-# vitrine: garrafas, fichas e os 6 fregueses (sóbrios e bêbados) em user://shots/gallery_*
+# vitrine: garrafas, mãos, fichas, os 6 fregueses (de frente, 3/4, perfil, sentados) e as
+# expressões neutro/feliz/bravo/bêbado de cada um em user://shots/gallery_*
 godot --path pinguco -- --gallery
 ```
 
@@ -75,17 +76,21 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   flâmula, calendário, relógio de parede que acompanha o turno, porta de enrolar e a rua lá
   fora. Piso de caquinhos vermelhos e azulejos são shaders procedurais.
 - **Jogador**: CharacterBody3D com WASD, mouse, gravidade, colisão, balanço de câmera,
-  passos, tremida de câmera e mãos em primeira pessoa que seguram, inclinam para servir e
-  reagem. Paredes invisíveis mantêm o jogador atrás do balcão.
+  passos, tremida de câmera e mãos em primeira pessoa (dedos com unhas e nós, antebraço
+  com manga dobrada e relógio). Elas fecham em volta da garrafa/copo, com o dedão cruzando
+  a frente, e o punho vira para servir. Paredes invisíveis mantêm o jogador atrás do balcão.
 - **Interação**: raycast da câmera, destaque pulsante em amarelo no objeto mirado, prompt
   com a ação ("Pegar Cerveja", "Segure: Amassando o limão"), dicas quando a ação não é
   possível e anel de progresso na mira.
 - **12 bebidas + 2 salgados** em um banco central (`BeverageDatabase`): Cerveja, Pinga,
   Vinho, Caipirinha, Batida, Refrigerante, Quentão, Whisky, Tequila, Gin Tônica, Jurubeba e
   Água, mais Coxinha e Pastel. Cada item tem nome, cor, letra, símbolo, modelo 3D, tempo de
-  preparo, força, preço e gírias. Os 14 símbolos (estrela, losango, círculo, limão, coração,
-  raio, chama, coroa, sol, lua, gota, folha, coxinha e pastel) usam o mesmo polígono no HUD e
-  em 3D. No HUD eles têm sombra, brilho e detalhes desenhados; em 3D, borda exata
+  preparo, força, preço e gírias. Os 14 símbolos são temáticos: caneca de chope (cerveja),
+  barril (pinga), cacho de uva (vinho), meia rodela de limão (caipirinha), morango (batida),
+  raio, chama, coroa, sol, lua, folha, gota, coxinha e pastel. Eles usam o mesmo polígono no
+  HUD e em 3D e têm estilo de adesivo (miolo claro e contorno escuro, legível em qualquer
+  cor de ficha). No HUD ganham detalhes desenhados (espuma, aduelas, gomos, sementes...),
+  e a ficha mostra a letra num selinho no canto. Em 3D a borda é exata
   (`Geometry2D.offset_polygon`).
 - **Garrafas por revolução (lathe)**: ombro e gargalo suaves, gerados a partir de um perfil.
   Os modelos incluem:
@@ -99,8 +104,10 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   - pratinho de salgado.
 
   O rótulo tem listras na cor da bebida, um medalhão com o símbolo e a letra, e acompanha a
-  curva do vidro. Cada bebida tem seu enfeite no copo (colarinho, gelo, sal e limão, canela,
-  canudinho...).
+  curva do vidro. O vidro tem reflexo, e as geladas têm gotas de condensação. As jarras têm
+  líquido translúcido, rodelas de limão com gomos ou morangos com folhinha. O copo servido
+  mostra a superfície do líquido, e cada bebida tem seu enfeite (colarinho cremoso,
+  rodelas de limão e gelo, borda de sal, rodela de pepino, laranja e canela, canudinho...).
 - **Pedidos**: balões de fala projetados sobre a cabeça do freguês, com texto, ficha da
   bebida com as pistas visíveis e barra de paciência. A entrega só é válida se for **este**
   freguês, com pedido aberto e a bebida certa. Entregar ao freguês errado conta como erro e
@@ -119,11 +126,17 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
     freguês às vezes muda de ideia ou pede qualquer coisa).
 - **6 perfis de freguês** (`CustomerDatabase`), cada um com visual, falas, tolerância,
   sensibilidade, paciência, ritmo, número de vacilos tolerados, gorjeta, ritmo de fome,
-  bebidas favoritas e gestos próprios. Os bonecos têm pescoço e queixo, mãos com dedão e
-  dedos, olhos com íris colorida, pupila e brilho, sobrancelhas grossas, boca com dentes e
-  língua, orelhas com parte interna, roupas com detalhes e calçados próprios. Cada freguês
-  **sorteia** tom de pele, cor da roupa, cor dos olhos e proporções (com semente no
-  apelido).
+  bebidas favoritas e gestos próprios. Os bonecos têm tronco torneado (quadril, cintura,
+  peito e ombros diferentes por tipo), braços com cotovelo, pernas com joelho (dobram ao
+  sentar e andar), mãos com quatro dedos dobrados e dedão. No rosto há cílios, íris com dois
+  brilhos, nariz com ponte, asas e narinas, lábios, orelhas com lóbulo e cabelos em calota
+  com linha do cabelo. As roupas têm barras, golas, bolsos e costuras, e cada tipo tem seu
+  calçado (tênis, sapato, coturno, chinelo, scarpin). Cada freguês **sorteia** tom de pele,
+  cor da roupa, cor dos olhos e proporções (com semente no apelido).
+  - **Expressões** (`CustomerRig.set_expression`): feliz (maçãs do rosto sobem, olhos
+    apertados por baixo, boca em "U"), bravo (pálpebras inclinadas, sobrancelhas tortas,
+    boca prensada em "∩") e bêbado (olhos desiguais, uma sobrancelha erguida, boca torta e
+    meio aberta). O `CustomerController` só repassa o humor que já calculava.
   - **O Tiozão**: regata, careca brilhante, bigodão, caneta na orelha, palito, cordão,
     bermuda e chinelo. Tolerância alta, barrigão que balança na risada.
   - **O Valentão**: braços de academia, tatuagem "MÃE", cicatriz, boné pra trás, brinco,

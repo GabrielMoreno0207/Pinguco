@@ -130,8 +130,9 @@ static func capsule(parent: Node3D, radius: float, height: float, pos: Vector3, 
 	var mesh := CapsuleMesh.new()
 	mesh.radius = radius
 	mesh.height = height
-	mesh.radial_segments = 8 if radius < 0.05 else 12
-	mesh.rings = 2 if radius < 0.05 else 4
+	# peças miúdas (dedos, lábios, cílios) não precisam de tesselação
+	mesh.radial_segments = 6 if radius < 0.02 else (8 if radius < 0.05 else 12)
+	mesh.rings = 1 if radius < 0.02 else (2 if radius < 0.05 else 4)
 	return _add(parent, mesh, pos, toon(color, outline))
 
 
@@ -142,6 +143,25 @@ static func torus(parent: Node3D, inner: float, outer: float, pos: Vector3, colo
 	mesh.rings = 12
 	mesh.ring_segments = 6
 	return _add(parent, mesh, pos, toon(color, outline))
+
+
+## Cápsula de `a` até `b` (dedos, alças, tiras, sobrancelhas...).
+static func limb(parent: Node3D, a: Vector3, b: Vector3, radius: float, color: Color, outline := false) -> MeshInstance3D:
+	var d := b - a
+	var mi := capsule(parent, radius, d.length() + radius * 2.0, (a + b) * 0.5, color, outline)
+	mi.basis = orient(d)
+	return mi
+
+
+## Base que aponta o eixo Y local na direção `d`.
+static func orient(d: Vector3) -> Basis:
+	var n := d.normalized()
+	var k := n.dot(Vector3.UP)
+	if k > 0.9999:
+		return Basis()
+	if k < -0.9999:
+		return Basis(Vector3.RIGHT, PI)
+	return Basis(Quaternion(Vector3.UP, n))
 
 
 static func _add(parent: Node3D, mesh: Mesh, pos: Vector3, mat: Material) -> MeshInstance3D:
