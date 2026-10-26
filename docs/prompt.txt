@@ -1,0 +1,298 @@
+# PINGUÇO: Prompt inicial de desenvolvimento
+
+Atue como um desenvolvedor sênior de jogos 3D, game designer e especialista em gameplay, arquitetura de software, direção de arte e otimização.
+
+Desenvolva o protótipo inicial de **Pinguço**, um jogo de comédia em primeira pessoa no qual o jogador é dono de um buteco brasileiro e precisa preparar bebidas para os clientes que aparecem no balcão. O objetivo principal é servir bebidas até deixar os fregueses completamente bêbados e fazê-los capotar, enquanto administra os pedidos, o tempo e o caos crescente do estabelecimento.
+
+Não quero apenas um documento, uma demonstração estática ou uma tela de menu. Quero um protótipo funcional, jogável e com sistemas reais implementados.
+
+## 1. Direção visual
+
+O jogo deve utilizar gráficos 3D cartunescos, coloridos e expressivos, com identidade visual própria.
+
+Referências de direção artística:
+- Personagens com proporções exageradas, cabeças expressivas e animações cômicas.
+- Cenário de buteco brasileiro de bairro, com balcão de madeira, geladeira de bebidas, prateleiras, mesas, banquetas, cartazes e decoração popular.
+- Cores saturadas, iluminação acolhedora e sombras suaves.
+- Modelos estilizados low-poly ou com geometria simples e materiais bem trabalhados.
+- Animações exageradas para os clientes, especialmente durante a embriaguez e ao capotar.
+- Interface integrada visualmente ao mundo do jogo, sem aparência genérica de template.
+
+O resultado deve parecer um jogo indie comercial, com personalidade, e não uma demonstração técnica.
+
+Não utilize assets, personagens ou interfaces de jogos existentes sem autorização. Quando não houver assets disponíveis, crie substitutos estilizados e funcionais.
+
+## 2. Câmera e movimentação
+
+O jogo deve ser totalmente em primeira pessoa.
+
+Implemente:
+- Movimentação WASD.
+- Controle de câmera com mouse.
+- Gravidade e colisões.
+- Mira central discreta.
+- Interação com objetos por meio de uma tecla, preferencialmente E.
+- Feedback visual ao apontar para um objeto interativo.
+- Animações de mãos para pegar garrafas, manipular copos e servir bebidas, quando viável para o protótipo.
+- Limites de movimentação que mantenham o jogador na área funcional do buteco.
+
+O jogador começa atrás do balcão, com acesso às bebidas e aos instrumentos necessários para atender os fregueses.
+
+A movimentação deve ser fluida e responsiva.
+
+## 3. Cenário inicial
+
+Crie um único buteco 3D completo o suficiente para permitir um turno de atendimento.
+
+O ambiente deve conter:
+- Balcão principal.
+- Pelo menos três posições para clientes.
+- Prateleira com bebidas identificadas.
+- Geladeira ou refrigerador.
+- Copos organizados no balcão.
+- Área para preparar e entregar os pedidos.
+- Porta de entrada.
+- Mesas, cadeiras ou banquetas.
+- Decoração característica de um bar brasileiro de bairro.
+
+Organize os objetos para que o jogador consiga identificar e alcançar as bebidas sem menus excessivos.
+
+Não crie um cenário vazio com objetos aleatórios. A composição deve transmitir a sensação de um buteco real, reinterpretado de forma cartunesca.
+
+## 4. Sistema de bebidas
+
+Implemente inicialmente seis bebidas fictícias ou genéricas, sem depender de marcas comerciais reais.
+
+Cada bebida deve possuir:
+- Nome.
+- Cor predominante.
+- Letra identificadora.
+- Símbolo visual.
+- Modelo ou representação 3D.
+- Tempo de preparação.
+- Identificador único usado pelo sistema de pedidos.
+
+Exemplo de catálogo inicial:
+
+1. Cerveja: amarela, letra C, símbolo de estrela.
+2. Pinga: transparente, letra P, símbolo de losango.
+3. Vinho: vermelho, letra V, símbolo de círculo.
+4. Caipirinha: verde, letra K, símbolo de limão.
+5. Batida: rosa, letra B, símbolo de coração.
+6. Refrigerante: marrom-escuro, letra R, símbolo de raio.
+
+As cores, letras e símbolos devem funcionar como pistas redundantes. O jogador não deve depender exclusivamente da cor para reconhecer uma bebida.
+
+Crie um sistema de dados centralizado para registrar as bebidas. Adicionar novas bebidas futuramente deve ser simples, sem reescrever a lógica principal do jogo.
+
+## 5. Sistema de pedidos dos clientes
+
+Cada cliente que entrar no estabelecimento deve gerar pedidos de bebidas.
+
+Os pedidos devem aparecer em balões de fala acima dos clientes, com boa legibilidade e posicionamento correto na cena 3D.
+
+No início, os pedidos são claros e diretos.
+
+Exemplos:
+- "Me vê uma cerveja gelada!"
+- "Patrão, manda uma pinga!"
+- "Hoje eu quero uma caipirinha!"
+
+O jogador deve:
+1. Identificar o cliente.
+2. Interpretar o pedido.
+3. Encontrar a bebida correspondente.
+4. Selecionar ou pegar a bebida.
+5. Preparar o pedido.
+6. Entregar a bebida ao cliente correto.
+
+O sistema deve validar a bebida e o cliente atendido, evitando que entregar uma bebida a um cliente errado seja contabilizado como sucesso.
+
+Implemente feedback visual e sonoro para pedidos corretos, incorretos e atrasados.
+
+## 6. Sistema progressivo de embriaguez
+
+Esta é a principal mecânica do jogo.
+
+Cada cliente possui um nível individual de embriaguez, começando em zero.
+
+Quando recebe uma bebida válida, sua embriaguez aumenta de acordo com a bebida e o perfil do personagem.
+
+A embriaguez deve modificar progressivamente:
+- O texto dos pedidos.
+- A clareza da fala.
+- A expressão facial.
+- A postura corporal.
+- As animações.
+- Os sons e a voz, quando disponíveis.
+- A velocidade e a previsibilidade dos pedidos.
+
+Crie quatro estágios iniciais:
+
+**Estágio 1: Sóbrio**
+- Pedidos perfeitamente claros.
+- Comportamento normal.
+- Pouca dificuldade.
+
+**Estágio 2: Alegre**
+- Algumas letras duplicadas.
+- Palavras prolongadas.
+- Risadas e pequenas mudanças de comportamento.
+
+**Estágio 3: Bêbado**
+- Palavras incompletas.
+- Erros de digitação intencionais.
+- Frases confusas.
+- Pedidos que exigem interpretar as pistas visuais.
+
+**Estágio 4: Completamente bêbado**
+- Frases absurdas e fragmentadas.
+- Palavras omitidas.
+- Pedidos parcialmente compreensíveis.
+- Necessidade de combinar letras, símbolos, cores e contexto.
+
+A dificuldade deve aumentar de forma gradual. Não transforme todos os pedidos em textos aleatórios e impossíveis de entender.
+
+Mesmo nos níveis mais difíceis, deve existir informação suficiente para que o jogador possa deduzir a resposta correta.
+
+A distorção do pedido deve ser gerada a partir do pedido verdadeiro. O sistema nunca deve perder a referência da bebida solicitada.
+
+## 7. Sistema de clientes
+
+Implemente pelo menos três tipos de clientes, com modelos e comportamentos visualmente diferentes.
+
+Cada cliente deve ter:
+- Nome ou apelido.
+- Aparência própria.
+- Personalidade.
+- Tolerância à bebida.
+- Velocidade para fazer pedidos.
+- Tempo de paciência.
+- Medidor individual de embriaguez.
+- Animações específicas.
+- Reações a pedidos corretos e incorretos.
+
+Exemplos:
+- O Tiozão: fala muito e tem tolerância elevada.
+- O Valentão: impaciente e propenso a reclamar.
+- O Falante: faz muitos pedidos e muda de assunto constantemente.
+
+Esses perfis devem ser configuráveis e fáceis de expandir.
+
+## 8. Sistema de capotar
+
+Quando o cliente atinge o limite de embriaguez, ele deve entrar em um estado de conclusão do atendimento.
+
+Implemente uma animação cômica e estilizada, como:
+- A cabeça caindo lentamente sobre o balcão.
+- O personagem escorregando na banqueta.
+- O personagem adormecendo com pequenos efeitos visuais cartunescos.
+
+O cliente deve deixar de solicitar novas bebidas, liberar sua posição e permitir a chegada de outro freguês.
+
+Exiba uma mensagem curta e engraçada quando isso acontecer.
+
+A mecânica deve ser tratada como comédia fictícia de videogame, com animações estilizadas e sem conteúdo gráfico explícito.
+
+## 9. Interface do jogo
+
+Crie uma interface discreta, legível e coerente com o estilo cartunesco.
+
+Elementos necessários:
+- Mira central.
+- Indicador de interação.
+- Balões de fala sobre os clientes.
+- Identificação visual das bebidas.
+- Dinheiro arrecadado.
+- Quantidade de clientes atendidos.
+- Quantidade de clientes que capotaram.
+- Indicador de tempo restante no turno.
+- Indicador de embriaguez quando o cliente estiver selecionado ou sendo atendido.
+- Feedback de pedidos corretos e incorretos.
+
+Os indicadores não devem ocupar a tela inteira. A prioridade é manter a visão do ambiente e dos clientes.
+
+## 10. Loop de gameplay
+
+O turno deve funcionar da seguinte forma:
+
+1. Os clientes chegam ao buteco.
+2. Cada cliente ocupa uma posição disponível.
+3. O cliente faz um pedido.
+4. O jogador prepara e entrega a bebida.
+5. O cliente aumenta seu nível de embriaguez.
+6. Os próximos pedidos ficam progressivamente mais difíceis de interpretar.
+7. Os clientes ficam impacientes se não forem atendidos.
+8. Clientes que atingem o limite de embriaguez capotam e liberam espaço.
+9. O jogador acumula dinheiro e pontuação.
+10. O turno termina quando o tempo acaba ou uma condição de encerramento é atingida.
+
+Ao final do turno, exiba uma tela de resultados com dinheiro ganho, pedidos corretos, erros, clientes atendidos e clientes que capotaram.
+
+## 11. Áudio e feedback
+
+Prepare a arquitetura para:
+- Sons de garrafas e copos.
+- Líquidos sendo servidos.
+- Sons de confirmação e erro.
+- Vozes cartunescas dos clientes.
+- Risadas, reclamações e roncos.
+- Sons ambientes de um buteco movimentado.
+
+Se não houver arquivos de áudio disponíveis, utilize sons temporários ou placeholders organizados. Não bloqueie o desenvolvimento esperando por assets de áudio.
+
+## 12. Arquitetura e qualidade do código
+
+Antes de implementar, examine os arquivos existentes do projeto e identifique a engine, a estrutura e as dependências já utilizadas.
+
+Se o projeto estiver vazio, use Godot 4 com GDScript como opção padrão, caso não exista uma engine previamente definida.
+
+Organize o código em sistemas separados:
+- PlayerController.
+- InteractionSystem.
+- BeverageDatabase.
+- OrderSystem.
+- CustomerController.
+- DrunkennessSystem.
+- CustomerSpawner.
+- GameManager.
+- HUDController.
+- ShiftManager.
+
+Use nomes consistentes, responsabilidades bem definidas e comunicação clara entre os sistemas.
+
+Evite concentrar toda a lógica em um único arquivo. Evite criar abstrações desnecessárias para um protótipo pequeno.
+
+## 13. Critérios de conclusão
+
+O protótipo só estará concluído quando:
+- O jogo iniciar sem erros críticos.
+- O jogador conseguir andar e olhar ao redor.
+- Os objetos interativos responderem corretamente.
+- Os clientes aparecerem e fizerem pedidos.
+- O jogador conseguir pegar, preparar e entregar bebidas.
+- Os pedidos ficarem progressivamente mais difíceis de interpretar.
+- O sistema validar corretamente cada entrega.
+- A embriaguez evoluir individualmente por cliente.
+- Os clientes capotarem com animações funcionais.
+- O dinheiro, a pontuação e o tempo funcionarem.
+- O turno puder ser concluído e os resultados exibidos.
+- A experiência for jogável do início ao fim.
+
+## 14. Forma de trabalho
+
+Trabalhe diretamente no projeto.
+
+Primeiro, inspecione a estrutura existente e identifique a engine e as ferramentas disponíveis.
+
+Depois, implemente o protótipo em etapas funcionais, começando pelo cenário, movimentação e interação. Em seguida, desenvolva o sistema de bebidas e pedidos, depois os clientes e a embriaguez, e finalmente a interface, os efeitos e o encerramento do turno.
+
+Execute testes e corrija os erros encontrados. Não considere uma funcionalidade concluída apenas porque o código foi escrito.
+
+Se faltar algum asset, crie um substituto funcional e prossiga.
+
+Não interrompa o desenvolvimento para pedir confirmação de detalhes menores. Tome decisões técnicas razoáveis e registre as decisões importantes em um README.
+
+Ao terminar, informe como executar o jogo, quais funcionalidades estão completas, quais limitações permanecem e quais seriam as próximas melhorias prioritárias.
+
+**Objetivo final:** entregar uma primeira versão jogável de Pinguço, com identidade visual cartunesca, humor brasileiro e uma mecânica central divertida baseada em interpretar pedidos cada vez mais confusos.
