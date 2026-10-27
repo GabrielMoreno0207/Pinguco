@@ -793,7 +793,7 @@ func _build_decor() -> void:
 				_tiki_torch(p)
 		_:
 			_pennant(Vector3(-5.96, 2.5, 2.6), 90)
-			_pennant_flags([Color(0.95, 0.2, 0.25), Color(1.0, 0.8, 0.15), Color(0.2, 0.65, 0.3), Color(0.2, 0.45, 0.95), Color(0.95, 0.45, 0.75), Color(1.0, 0.55, 0.15)])
+			_halloween_decor()
 
 	# ventiladores de teto
 	for p in [Vector3(-2.5, 3.2, 3.2), Vector3(2.0, 3.2, 3.6)]:
@@ -805,6 +805,112 @@ func _pennant_flags(colors: Array) -> void:
 	for line in 4:
 		var z := 0.8 + line * 1.4
 		_bunting(Vector3(-5.8, 2.85, z), Vector3(5.8, 2.85, z + 0.3), colors)
+
+
+## Decoração de Halloween do boteco: bandeirinhas laranja/preto/roxo, morcegos, abóboras e teias.
+func _halloween_decor() -> void:
+	_pennant_flags([Color(1.0, 0.5, 0.08), Color(0.08, 0.06, 0.1), Color(0.5, 0.2, 0.65)])
+	# morcegos pendurados entre as fileiras de bandeirinhas (longe dos ventiladores)
+	for b in [Vector3(-4.2, 2.6, 1.5), Vector3(-0.8, 2.5, 1.6), Vector3(3.3, 2.65, 1.5), Vector3(0.4, 2.55, 2.9),
+			Vector3(4.4, 2.5, 3.0), Vector3(-4.6, 2.6, 4.3), Vector3(-1.0, 2.5, 4.4), Vector3(4.2, 2.6, 4.9)]:
+		_bat(b)
+	# abóboras acesas viradas para o jogador
+	_jack_o_lantern(Vector3(-3.55, COUNTER_TOP + 0.04, 0.0), 0.13)
+	_jack_o_lantern(Vector3(-3.15, COUNTER_TOP + 0.04, 0.1), 0.09)
+	_jack_o_lantern(Vector3(1.9, 0.0, 5.75), 0.17)
+	_jack_o_lantern(Vector3(-5.5, 0.0, 5.7), 0.15)
+	# teias nos cantos do teto
+	var top := ROOM_MAX.y - 0.02
+	_cobweb(Vector3(ROOM_MIN.x + 0.02, top, ROOM_MAX.z - 0.02), Vector3.RIGHT, Vector3.DOWN)
+	_cobweb(Vector3(ROOM_MIN.x + 0.02, top, ROOM_MAX.z - 0.02), Vector3.FORWARD, Vector3.DOWN)
+	_cobweb(Vector3(ROOM_MAX.x - 0.02, top, ROOM_MAX.z - 0.02), Vector3.LEFT, Vector3.DOWN)
+	_cobweb(Vector3(-3.93, top, ROOM_MIN.z + 0.02), Vector3.RIGHT, Vector3.DOWN)
+	_cobweb(Vector3(3.93, top, ROOM_MIN.z + 0.02), Vector3.LEFT, Vector3.DOWN)
+
+
+func _bat(pos: Vector3) -> void:
+	Mats.cylinder(self, 0.004, ROOM_MAX.y - pos.y, Vector3(pos.x, (ROOM_MAX.y + pos.y) / 2.0, pos.z), Color(0.1, 0.1, 0.1), false)
+	var bat := MeshInstance3D.new()
+	# silhueta com y para baixo (flat_polygon_mesh inverte o y)
+	bat.mesh = Mats.flat_polygon_mesh(PackedVector2Array([
+		Vector2(0, -0.15), Vector2(0.1, -0.35), Vector2(0.15, -0.1), Vector2(0.5, -0.3), Vector2(1.0, -0.15),
+		Vector2(0.85, 0.0), Vector2(0.7, 0.1), Vector2(0.55, 0.0), Vector2(0.4, 0.15), Vector2(0.25, 0.05),
+		Vector2(0.12, 0.3), Vector2(0, 0.2), Vector2(-0.12, 0.3), Vector2(-0.25, 0.05), Vector2(-0.4, 0.15),
+		Vector2(-0.55, 0.0), Vector2(-0.7, 0.1), Vector2(-0.85, 0.0), Vector2(-1.0, -0.15), Vector2(-0.5, -0.3),
+		Vector2(-0.15, -0.1), Vector2(-0.1, -0.35)]), 0.2)
+	bat.material_override = Mats.unshaded(Color(0.07, 0.05, 0.09))
+	bat.position = pos
+	bat.rotation.y = randf_range(-0.6, 0.6)
+	bat.rotation.z = randf_range(-0.15, 0.15)
+	add_child(bat)
+	# olhinhos
+	for side in [-1.0, 1.0]:
+		var eye := Mats.sphere(bat, 0.008, Vector3(side * 0.018, 0.035, 0.006), Color(1.0, 0.8, 0.2), false)
+		eye.material_override = Mats.unshaded(Color(1.0, 0.8, 0.2))
+
+
+## Abóbora de Halloween com rosto aceso, virada para -z (o lado do jogador).
+func _jack_o_lantern(pos: Vector3, r: float) -> void:
+	var n := Node3D.new()
+	n.position = pos + Vector3(0, r * 0.8, 0)
+	n.rotation_degrees.y = randf_range(-15.0, 15.0)
+	add_child(n)
+	# gomos
+	for i in 6:
+		var a := i * TAU / 6.0
+		Mats.sphere(n, r * 0.62, Vector3(cos(a) * r * 0.42, 0, sin(a) * r * 0.42), Color(1.0, 0.5, 0.1), true, Vector3(1, 1.25, 1))
+	Mats.sphere(n, r * 0.75, Vector3.ZERO, Color(0.95, 0.45, 0.08), false, Vector3(1, 1.05, 1))
+	Mats.cylinder(n, r * 0.09, r * 0.35, Vector3(0, r * 0.85, 0), Color(0.3, 0.4, 0.15), true, r * 0.06)
+	# rosto recortado, brilhando por dentro
+	var glow := Mats.unshaded(Color(1.0, 0.85, 0.25))
+	var front := -r * 1.06
+	var shapes := [
+		[PackedVector2Array([Vector2(-1, 0.6), Vector2(1, 0.6), Vector2(0, -0.8)]), Vector3(-r * 0.32, r * 0.22, front)],
+		[PackedVector2Array([Vector2(-1, 0.6), Vector2(1, 0.6), Vector2(0, -0.8)]), Vector3(r * 0.32, r * 0.22, front)],
+		[PackedVector2Array([Vector2(-1, 0.6), Vector2(1, 0.6), Vector2(0, -0.6)]), Vector3(0, 0.0, front)],
+		[PackedVector2Array([Vector2(-3, -0.3), Vector2(-2, 0.2), Vector2(-1, -0.2), Vector2(0, 0.3), Vector2(1, -0.2),
+			Vector2(2, 0.2), Vector2(3, -0.3), Vector2(2, 0.9), Vector2(0, 1.2), Vector2(-2, 0.9)]), Vector3(0, -r * 0.3, front)],
+	]
+	for s in shapes:
+		var f := MeshInstance3D.new()
+		f.mesh = Mats.flat_polygon_mesh(s[0], r * 0.16)
+		f.material_override = glow
+		f.position = s[1]
+		n.add_child(f)
+	var l := OmniLight3D.new()
+	l.position = Vector3(0, 0, -r * 1.6)
+	l.light_color = Color(1.0, 0.55, 0.15)
+	l.light_energy = 0.5
+	l.omni_range = 1.2
+	n.add_child(l)
+	_omni(l)
+
+
+## Teia no canto: fios saindo do canto entre as direções u e v, com anéis ligando os fios.
+func _cobweb(corner: Vector3, u: Vector3, v: Vector3) -> void:
+	var color := Color(0.92, 0.92, 0.95)
+	var strands := 5
+	var length := 0.6
+	var rings := [0.18, 0.33, 0.48]
+	var dirs: Array[Vector3] = []
+	for i in strands:
+		var a := float(i) / (strands - 1) * PI / 2.0
+		var d := (u * cos(a) + v * sin(a)).normalized()
+		dirs.append(d)
+		_strand(corner, corner + d * length, color)
+	for rr: float in rings:
+		for i in strands - 1:
+			# anel levemente caído para o canto, como teia de verdade
+			var mid := (dirs[i] + dirs[i + 1]).normalized() * rr * 0.9
+			_strand(corner + dirs[i] * rr, corner + mid, color)
+			_strand(corner + mid, corner + dirs[i + 1] * rr, color)
+
+
+func _strand(a: Vector3, b: Vector3, color: Color) -> void:
+	var dir := b - a
+	var seg := Mats.cylinder(self, 0.003, a.distance_to(b), (a + b) / 2.0, color, false)
+	seg.look_at_from_position((a + b) / 2.0, b, Vector3.UP if absf(dir.normalized().y) < 0.9 else Vector3.RIGHT)
+	seg.rotate_object_local(Vector3.RIGHT, PI / 2.0)
 
 
 func _tv(pos: Vector3, yaw: float, screen_size: Vector2, crt: bool) -> void:
