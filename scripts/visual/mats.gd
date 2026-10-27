@@ -4,6 +4,8 @@ extends RefCounted
 ## para montar modelos estilizados a partir de primitivas.
 
 static var _cache: Dictionary = {}
+## Enquanto true, toon() devolve plástico liso sem contorno (estilo dos fregueses).
+static var plastic := false
 static var _outline: StandardMaterial3D
 static var _highlight: ShaderMaterial
 
@@ -21,6 +23,8 @@ void fragment() {
 
 
 static func toon(color: Color, outline := true, rough := 0.8, emission := 0.0) -> StandardMaterial3D:
+	if plastic:
+		return plastic_mat(color, rough, emission)
 	var key := "%s|%s|%s|%s" % [color.to_html(), outline, rough, emission]
 	if _cache.has(key):
 		return _cache[key]
@@ -40,6 +44,28 @@ static func toon(color: Color, outline := true, rough := 0.8, emission := 0.0) -
 		m.emission_energy_multiplier = emission
 	if outline:
 		m.next_pass = outline_mat()
+	_cache[key] = m
+	return m
+
+
+## Plástico liso de boneco: sombreado suave, brilho especular e sem contorno.
+static func plastic_mat(color: Color, rough := 0.8, emission := 0.0) -> StandardMaterial3D:
+	var key := "plastic|%s|%s|%s" % [color.to_html(), rough, emission]
+	if _cache.has(key):
+		return _cache[key]
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = clampf(rough, 0.35, 0.6)
+	m.metallic_specular = 0.35
+	m.diffuse_mode = BaseMaterial3D.DIFFUSE_BURLEY
+	m.rim_enabled = true
+	m.rim = 0.12
+	m.rim_tint = 0.4
+	# sempre por pixel: por vértice o brilho do plástico vira estrelinhas
+	if emission > 0.0:
+		m.emission_enabled = true
+		m.emission = color
+		m.emission_energy_multiplier = emission
 	_cache[key] = m
 	return m
 

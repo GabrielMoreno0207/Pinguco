@@ -6,7 +6,8 @@ você precisa decifrar o que ele quer pela cor, pela letra, pelo símbolo e pelo
 
 Protótipo jogável feito em **Godot 4.7 (GDScript)**. Todo o conteúdo (modelos, texturas,
 sons e música) é gerado proceduralmente no código. As únicas exceções são duas fontes
-livres (OFL).
+livres (OFL). As malhas dos fregueses são esculpidas por código fora do jogo
+(`tools/bake_customers.py`) e ficam gravadas em `assets/customers/`.
 
 ## Como rodar
 
@@ -126,18 +127,19 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
     freguês às vezes muda de ideia ou pede qualquer coisa).
 - **6 perfis de freguês** (`CustomerDatabase`), cada um com visual, falas, tolerância,
   sensibilidade, paciência, ritmo, número de vacilos tolerados, gorjeta, ritmo de fome,
-  bebidas favoritas e gestos próprios. Os bonecos têm tronco torneado (quadril, cintura,
-  peito e ombros diferentes por tipo), braços com cotovelo, pernas com joelho (dobram ao
-  sentar e andar), mãos com quatro dedos dobrados e dedão. No rosto há cílios, íris com dois
-  brilhos, nariz com ponte, asas e narinas, lábios, orelhas com lóbulo e cabelos em calota
-  com linha do cabelo. As roupas têm barras, golas, bolsos e costuras, e cada tipo tem seu
-  calçado (tênis, sapato, coturno, chinelo, scarpin). Cada freguês **sorteia** tom de pele,
-  cor da roupa, cor dos olhos e proporções (com semente no apelido).
+  bebidas favoritas e gestos próprios. Os bonecos são **modelados** no estilo bonequinho de
+  vinil: malha contínua de plástico liso (sem contorno), cabeça oval, olhões brancos
+  saltados com pupila pretinha, sobrancelhas grossas, nariz de bolinha e corpo esguio. O
+  corpo é uma malha só, com esqueleto (ombro, cotovelo, quadril, joelho e a barriga do
+  Tiozão) que dobra ao sentar, andar e gesticular. As roupas têm barras, golas, bolsos e
+  estampas recortadas na malha, e cada tipo tem seu calçado (tênis, sapato, coturno,
+  chinelo, scarpin). Cada freguês **sorteia** tom de pele, cor da roupa, variações de
+  acessório (boné, touca, mochila) e altura (com semente no apelido).
   - **Expressões** (`CustomerRig.set_expression`): feliz (maçãs do rosto sobem, olhos
     apertados por baixo, boca em "U"), bravo (pálpebras inclinadas, sobrancelhas tortas,
     boca prensada em "∩") e bêbado (olhos desiguais, uma sobrancelha erguida, boca torta e
     meio aberta). O `CustomerController` só repassa o humor que já calculava.
-  - **O Tiozão**: regata, careca brilhante, bigodão, caneta na orelha, palito, cordão,
+  - **O Tiozão**: regata, careca brilhante, bigodão, caneta na orelha, cordão,
     bermuda e chinelo. Tolerância alta, barrigão que balança na risada.
   - **O Valentão**: braços de academia, tatuagem "MÃE", cicatriz, boné pra trás, brinco,
     corrente e coturno. Impaciente, soca o balcão.
@@ -189,9 +191,13 @@ scripts/
   customers/   CustomerController, CustomerRig, CustomerHitbox, Seat
   ui/          HUDController, SpeechBubble, StatusTag, BeverageChip, Crosshair, DrunkMeter,
                StarRow, UiTheme
-  visual/      Mats (toon + contorno), SymbolShapes, BeverageModels
+  visual/      Mats (toon + contorno, plástico), SymbolShapes, BeverageModels
   world/       BarBuilder, BarShaders
   tests/       auto_test.gd, bench.gd, gallery.gd
+tools/
+  sdf_sculpt.py                 escultura por SDF -> malha (marching cubes, decimação,
+                                regiões de material recortadas, pesos de esqueleto)
+  bake_customers.py             os 6 fregueses; grava assets/customers/<perfil>.bin
 ```
 
 - Os sistemas se comunicam por **sinais**. O HUD escuta `GameManager`, `ShiftManager` e
@@ -200,7 +206,17 @@ scripts/
   `BeverageData` `.tres` em `res://data/beverages/`. O dispenser aparece sozinho na
   geladeira, na prateleira ou na bancada, conforme `station`.
 - **Adicionar um freguês**: inclua um perfil em `CustomerDatabase.PROFILES` ou salve um
-  `.tres` em `res://data/customers/`.
+  `.tres` em `res://data/customers/`. Um tipo de corpo novo também precisa de uma função de
+  modelo em `tools/bake_customers.py` e de uma entrada em `CustomerRig.FILES`.
+- **Mexer no visual dos fregueses**: edite `tools/bake_customers.py` e rode
+  `python tools/bake_customers.py` (precisa de `numpy`, `scikit-image` e
+  `fast-simplification`; `--fast` gera uma prévia com voxel maior). Cada freguês é a união
+  suave de primitivas num campo de distância: o script extrai a malha, simplifica, recorta
+  as bordas de cor (roupa, cabelo, listras, bolinhas) e calcula os pesos do esqueleto. A
+  escultura é feita em pose A (braços e pernas afastados) para nada se fundir com o
+  tronco. Confira com `godot --path pinguco -- --gallery`.
+- **Exportar o jogo**: os `.bin` não são recursos do Godot. No preset de exportação, inclua
+  `assets/customers/*.bin` em *Filtros para exportar arquivos/pastas não-recurso*.
 
 ## Decisões importantes
 
@@ -213,9 +229,12 @@ scripts/
 - **Tudo gerado em código** (cenas montadas por scripts, sem `.tscn` complexos). Isso mantém
   o projeto diffável, sem assets binários, e torna os testes simples. A cena `main.tscn`
   só tem a raiz.
-- **Arte**: estilo toon com contorno por casca invertida, cores saturadas e cabeças
-  grandes. As animações são procedurais (tweens e senoides) em vez de AnimationPlayer, o
-  que facilita reagir à embriaguez em tempo real.
+- **Arte**: o cenário usa estilo toon com contorno por casca invertida e cores saturadas.
+  Os fregueses usam plástico liso, como bonequinhos de vinil, com malhas esculpidas por
+  SDF em vez de primitivas encaixadas. As animações são procedurais (tweens e senoides)
+  em vez de AnimationPlayer, o que facilita reagir à embriaguez em tempo real. O
+  controlador gira nós comuns, e o `CustomerRig` copia esses nós para o esqueleto a cada
+  frame.
 - **Fluxo de preparo** com 3 etapas (copo → servir segurando E → entregar). Isso dá o
   "trabalho de bar" sem virar menu. A garrafa volta sozinha para evitar tédio.
 - **Refrigerante e água "rebatem"**: têm força negativa e baixam um pouco a embriaguez. É um
