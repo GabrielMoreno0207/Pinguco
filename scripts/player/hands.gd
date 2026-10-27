@@ -1,19 +1,25 @@
 class_name Hands
 extends Node3D
-## Mãos estilizadas em primeira pessoa (viewmodel) segurando garrafa/copo.
-## Cada mão tem duas poses montadas uma vez só (malhas mescladas, poucas draw calls):
-## "Grip" (dedos fechados em volta do item, dedão cruzando a frente) e "Idle" (palma
-## para baixo, dedos relaxados). Antebraço com manga dobrada; relógio no pulso esquerdo.
+## Mãos em primeira pessoa (viewmodel). Cada braço é uma malha esculpida em
+## tools/bake_hands.py (assets/hands/hand_r.bin e hand_l.bin): antebraço com manga
+## dobrada (relógio na esquerda) e mão numa malha contínua só, com esqueleto nos dedos.
+## Os dedos fecham de verdade em volta do item: cada falange gira até encostar no
+## cilindro do copo/garrafa (raio medido pela malha). Solta = dedos relaxados e palma
+## para baixo. Servir = o antebraço gira (pronação) em volta do próprio eixo.
 
 const SKIN := Color(0.96, 0.76, 0.6)
 const SLEEVE := Color(0.85, 0.2, 0.18)
-const NAIL := Color(1.0, 0.86, 0.8)
-const OUTLINE_GROW := 0.0035
+const DATA_DIR := "res://assets/hands/"
+## Direção pulso → cotovelo (mão direita; a esquerda é o espelho em X).
+const FORE_DIR := Vector3(0.22, -0.4, 1.0)
+## Comprimento da ponta de cada dedo (as outras falanges saem das posições dos ossos).
+const TIP_LEN := [0.017, 0.018, 0.017, 0.015]
+const FINGER_R := [0.0104, 0.0106, 0.0101, 0.009]
+## Dobra de cada falange com a mão solta (o mindinho dobra um pouco mais).
+const IDLE_CURL := [0.22, 0.38, 0.28]
 
-var _right: Node3D
-var _left: Node3D
-var _right_grip: Node3D
-var _right_idle: Node3D
+var _right: _Arm
+var _left: _Arm
 var _item_anchor: Node3D
 var _item: Node3D
 var _base_right := Vector3(0.24, -0.27, -0.44)
@@ -21,166 +27,112 @@ var _base_left := Vector3(-0.3, -0.34, -0.48)
 var _pouring := false
 var _pour_blend := 0.0
 var _poke := 0.0
-var _mats: Dictionary = {}
+
+
+## Um braço montado: nós de controle dos ossos (o esqueleto copia a cada quadro) e
+## as curvas dos dedos solta/segurando.
+class _Arm:
+	var side := 1.0
+	var root: Node3D
+	## pivô do pulso: gira o braço inteiro (palma para baixo, servir)
+	var pose: Node3D
+	var skeleton: Skeleton3D
+	var nodes: Dictionary = {}
+	var bone_nodes: Array[Node3D] = []
+	var wrist := Vector3.ZERO
+	var thumb_rest := Basis()
+	var grip := 0.0
+	## [dedo][falange] em radianos, e a direção do dedão ao segurar
+	var grip_curl := []
+	var thumb_dir := Vector3.ZERO
+	var thumb_curl := 0.0
+
+	func finger(i: int, j: int) -> Node3D:
+		return nodes["f%d%s" % [i, "abc"[j]]]
+
+	func sync() -> void:
+		for k in bone_nodes.size():
+			var n := bone_nodes[k]
+			skeleton.set_bone_pose_position(k, n.position)
+			skeleton.set_bone_pose_rotation(k, n.quaternion)
 
 
 func _ready() -> void:
-	_right = _build_hand(true)
-	_right.position = _base_right
-	add_child(_right)
-	_left = _build_hand(false)
-	_left.position = _base_left
-	add_child(_left)
-	_right_grip = _right.get_node("Grip")
-	_right_idle = _right.get_node("Idle")
-	# a esquerda nunca segura nada
-	_left.get_node("Grip").visible = false
+	_right = _build_arm(true)
+	_right.root.position = _base_right
+	_left = _build_arm(false)
+	_left.root.position = _base_left
 	_item_anchor = Node3D.new()
-	_right_grip.add_child(_item_anchor)
-	_set_holding(false)
+	_right.nodes.hand.add_child(_item_anchor)
+	_apply_pose(_right)
+	_apply_pose(_left)
 
 
-## Material toon com contorno fino (o de 1.2 cm do cenário fica grosso demais tão perto da câmera).
-func _mat(c: Color) -> StandardMaterial3D:
-	var key := c.to_html()
-	if _mats.has(key):
-		return _mats[key]
-	var m := Mats.toon(c, false).duplicate() as StandardMaterial3D
-	var o := Mats.outline_mat().duplicate() as StandardMaterial3D
-	o.grow_amount = OUTLINE_GROW
-	m.next_pass = o
-	_mats[key] = m
-	return m
+## Plástico liso, como os fregueses. Sem contorno: perto da câmera o casco invertido
+## vazava pelas dobras dos dedos (pontinhos pretos nas costas da mão).
+func _mat(c: Color, rough := 0.8) -> StandardMaterial3D:
+	return Mats.plastic_mat(c, rough)
 
 
-func _seg(parent: Node3D, a: Vector3, b: Vector3, r: float, c: Color) -> MeshInstance3D:
-	var mi := Mats.limb(parent, a, b, r, c)
-	mi.material_override = _mat(c)
-	return mi
+func _region_mat(model: Dictionary, r: int) -> Material:
+	if r >= CustomerRig.FIXED_BASE:
+		var e: Dictionary = model.fixed[r - CustomerRig.FIXED_BASE]
+		return _mat(e.colors[0], e.rough if e.rough >= 0.0 else 0.8)
+	match r:
+		CustomerRig.Role.SHIRT:
+			return _mat(SLEEVE)
+		CustomerRig.Role.SHIRT_LIGHT:
+			return _mat(SLEEVE.lightened(0.2))
+	return _mat(SKIN)
 
 
-func _ball(parent: Node3D, r: float, pos: Vector3, c: Color, scl := Vector3.ONE) -> MeshInstance3D:
-	var mi := Mats.sphere(parent, r, pos, c, false, scl)
-	mi.material_override = _mat(c)
-	return mi
-
-
-func _build_hand(right: bool) -> Node3D:
-	var h := Node3D.new()
-	var side := 1.0 if right else -1.0
-	# antebraço (afina no pulso) indo para baixo/trás, saindo da tela
-	var wrist := Vector3(side * 0.008, -0.01, 0.05)
-	var elbow := wrist + Vector3(side * 0.22, -0.4, 1.0).normalized() * 0.34
-	var arm := Mats.cylinder(h, 0.05, 1.0, Vector3.ZERO, SKIN, false, 0.036)
-	arm.material_override = _mat(SKIN)
-	arm.basis = Mats.orient(wrist - elbow)
-	arm.scale = Vector3(1.0, (wrist - elbow).length(), 1.0)
-	arm.position = (wrist + elbow) * 0.5
-	# pelinhos do braço
-	for i in 5:
-		var t := 0.25 + i * 0.13
-		var p := wrist.lerp(elbow, t) + Vector3(side * 0.012 * (i % 2), 0.036 + t * 0.012, 0.0)
-		Mats.limb(h, p, p + Vector3(side * 0.006, 0.004, 0.012), 0.0018, SKIN.darkened(0.45))
-	# manga dobrada: tubo + dobra mais clara + botão
-	var sl_a := wrist.lerp(elbow, 0.68)
-	var sl_b := wrist.lerp(elbow, 1.05)
-	var sleeve := Mats.cylinder(h, 0.07, 1.0, Vector3.ZERO, SLEEVE, false, 0.066)
-	sleeve.material_override = _mat(SLEEVE)
-	sleeve.basis = Mats.orient(sl_a - sl_b)
-	sleeve.scale = Vector3(1.0, (sl_a - sl_b).length(), 1.0)
-	sleeve.position = (sl_a + sl_b) * 0.5
-	var fold_a := wrist.lerp(elbow, 0.62)
-	var fold_b := wrist.lerp(elbow, 0.74)
-	var fold := Mats.cylinder(h, 0.074, 1.0, Vector3.ZERO, SLEEVE.lightened(0.2), false, 0.072)
-	fold.material_override = _mat(SLEEVE.lightened(0.2))
-	fold.basis = Mats.orient(fold_a - fold_b)
-	fold.scale = Vector3(1.0, (fold_a - fold_b).length(), 1.0)
-	fold.position = (fold_a + fold_b) * 0.5
-	_ball(h, 0.009, wrist.lerp(elbow, 0.68) + Vector3(side * 0.03, 0.06, 0.0), Color(0.95, 0.93, 0.85))
-	if not right:
-		# relógio de pulso: pulseira + caixa + mostrador
-		var wa := wrist.lerp(elbow, 0.1)
-		var wb := wrist.lerp(elbow, 0.2)
-		var band := Mats.cylinder(h, 0.043, 1.0, Vector3.ZERO, Color(0.2, 0.15, 0.12), false)
-		band.material_override = _mat(Color(0.2, 0.15, 0.12))
-		band.basis = Mats.orient(wa - wb)
-		band.scale = Vector3(1.0, (wa - wb).length(), 1.0)
-		band.position = (wa + wb) * 0.5
-		var top := (wa + wb) * 0.5 + Vector3(0, 0.042, 0)
-		var case := Mats.cylinder(h, 0.022, 0.012, top, Color(0.85, 0.75, 0.35), false)
-		case.material_override = _mat(Color(0.85, 0.75, 0.35))
-		Mats.cylinder(h, 0.017, 0.004, top + Vector3(0, 0.007, 0), Color(0.97, 0.96, 0.9), false)
-		Mats.box(h, Vector3(0.002, 0.002, 0.013), top + Vector3(0, 0.0095, -0.004), UiTheme.INK, false)
-		Mats.box(h, Vector3(0.01, 0.002, 0.002), top + Vector3(0.004, 0.0095, 0), UiTheme.INK, false)
-	var grip := Node3D.new()
-	grip.name = "Grip"
-	# vira um pouco as costas da mão para a câmera
-	grip.rotation.y = -side * 0.35
-	h.add_child(grip)
-	_build_pose(grip, side, true)
-	var idle := Node3D.new()
-	idle.name = "Idle"
-	# palma para baixo, mão meio solta
-	idle.rotation = Vector3(-0.25, -side * 0.2, side * 1.35)
-	h.add_child(idle)
-	_build_pose(idle, side, false)
-	for n: Node3D in [h, grip, idle]:
-		Mats.merge_children(n)
-	for c in h.find_children("*", "GeometryInstance3D", true, false):
-		(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		c.set_meta("no_highlight", true)
-	return h
-
-
-## Palma com a face interna em -X (mão direita), dedos saindo para -Z e empilhados
-## em Y (indicador em cima). grip = dedos fechados em volta de um item a -X.
-func _build_pose(n: Node3D, side: float, grip: bool) -> void:
-	# palma + costas da mão
-	_ball(n, 0.05, Vector3.ZERO, SKIN, Vector3(0.48, 0.92, 1.0))
-	_ball(n, 0.042, Vector3(side * 0.008, 0.0, 0.01), SKIN, Vector3(0.45, 0.85, 0.95))
-	# monte do dedão
-	_ball(n, 0.024, Vector3(-side * 0.012, 0.022, 0.018), SKIN, Vector3(0.8, 1.0, 1.3))
-	var curl1 := 0.75 if grip else 0.12
-	var curl2 := 1.75 if grip else 0.45
-	var curl3 := 2.5 if grip else 0.75
-	var lens := [0.03, 0.033, 0.031, 0.024]
-	for i in 4:
-		var y := 0.03 - i * 0.02
-		var r := 0.0115 if i < 3 else 0.0098
-		var l: float = lens[i]
-		var base := Vector3(side * 0.003, y, -0.044)
-		var d1 := Vector3(-side * sin(curl1), -0.06 * i, -cos(curl1)).normalized()
-		var d2 := Vector3(-side * sin(curl2), -0.04 * i, -cos(curl2)).normalized()
-		var d3 := Vector3(-side * sin(curl3), 0.0, -cos(curl3)).normalized()
-		var p1 := base + d1 * l
-		var p2 := p1 + d2 * l * 0.75
-		var p3 := p2 + d3 * l * 0.55
-		_seg(n, base, p1, r, SKIN)
-		_seg(n, p1, p2, r * 0.95, SKIN)
-		_seg(n, p2, p3, r * 0.9, SKIN)
-		# nó do dedo (costas) e unha na ponta
-		_ball(n, r * 1.15, base + Vector3(side * 0.008, 0.0, 0.004), SKIN)
-		var dorsal := Vector3(side * cos(curl3), 0.0, -sin(curl3))
-		var nail := Mats.sphere(n, r * 0.75, p3 - d3 * r * 0.2 + dorsal * r * 0.62, NAIL, false)
-		nail.basis = Mats.orient(d3)
-		nail.scale = Vector3(1.0, 1.1, 0.45)
-		nail.material_override = Mats.toon(NAIL, false)
-	# dedão: grip = cruza a frente do item (lado da câmera)
-	var t0 := Vector3(-side * 0.012, 0.03, 0.02)
-	var t1 := t0 + (Vector3(-side * 0.55, 0.15, 0.45) if grip else Vector3(-side * 0.5, 0.25, -0.6)).normalized() * 0.034
-	var t2 := t1 + (Vector3(-side * 1.0, 0.0, 0.05) if grip else Vector3(-side * 0.35, 0.1, -0.9)).normalized() * 0.03
-	_seg(n, t0, t1, 0.0135, SKIN)
-	_seg(n, t1, t2, 0.0125, SKIN)
-	var td := (t2 - t1).normalized()
-	var tn := Mats.sphere(n, 0.0095, t2 - td * 0.003 + (Vector3(0, 0, 0.009) if grip else Vector3(0, 0.008, 0)), NAIL, false)
-	tn.basis = Mats.orient(td)
-	tn.scale = Vector3(1.0, 1.1, 0.45)
-	tn.material_override = Mats.toon(NAIL, false)
-
-
-func _set_holding(on: bool) -> void:
-	_right_grip.visible = on
-	_right_idle.visible = not on
+func _build_arm(right: bool) -> _Arm:
+	var a := _Arm.new()
+	a.side = 1.0 if right else -1.0
+	var model := CustomerRig.load_model("hand_r" if right else "hand_l", DATA_DIR)
+	a.root = Node3D.new()
+	add_child(a.root)
+	a.pose = Node3D.new()
+	a.root.add_child(a.pose)
+	a.skeleton = Skeleton3D.new()
+	a.pose.add_child(a.skeleton)
+	var list: Array[Node3D] = []
+	var bone_of: Dictionary = {}
+	for i in model.nodes.size():
+		var n: Dictionary = model.nodes[i]
+		var nd := Node3D.new()
+		nd.name = n.name
+		nd.transform = n.xform
+		(a.pose if n.parent < 0 else list[n.parent]).add_child(nd)
+		list.append(nd)
+		a.nodes[n.name] = nd
+		if n.bone:
+			var b := a.skeleton.add_bone(n.name)
+			if n.parent >= 0 and bone_of.has(n.parent):
+				a.skeleton.set_bone_parent(b, bone_of[n.parent])
+			a.skeleton.set_bone_rest(b, n.bind)
+			bone_of[i] = b
+			a.bone_nodes.append(nd)
+	a.skeleton.reset_bone_poses()
+	var skin_res := a.skeleton.create_skin_from_rest_transforms()
+	for part: Dictionary in model.parts:
+		var mi := MeshInstance3D.new()
+		mi.name = part.name
+		mi.mesh = part.mesh
+		var regions: PackedInt32Array = part.regions
+		for i in regions.size():
+			mi.set_surface_override_material(i, _region_mat(model, regions[i]))
+		if part.skinned:
+			a.skeleton.add_child(mi)
+			mi.skeleton = NodePath("..")
+			mi.skin = skin_res
+		else:
+			list[part.node].add_child(mi)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.set_meta("no_highlight", true)
+	a.wrist = a.nodes.arm.position
+	a.thumb_rest = a.nodes.t_a.basis
+	return a
 
 
 func show_item(item: HeldItem) -> void:
@@ -198,18 +150,18 @@ func show_item(item: HeldItem) -> void:
 		HeldItem.Kind.FOOD:
 			_item = BeverageModels.build_container(item.beverage, false)
 			_item.position = Vector3(0, -0.02, 0)
-	_set_holding(_item != null)
 	if _item:
 		for c in _item.find_children("*", "GeometryInstance3D", true, false):
 			(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			c.set_meta("no_highlight", true)
 		_item_anchor.add_child(_item)
-		# encosta o item na palma (raio medido pela malha) e desfaz o giro da pose
+		# encosta o item na palma (raio medido pela malha) e fecha os dedos em volta dele
 		var radius := _item_radius(_item) * _item.scale.x
-		_item_anchor.position = Vector3(-(0.024 + radius), 0.0, -0.012)
-		_item_anchor.rotation.y = -_right_grip.rotation.y
+		_item_anchor.position = Vector3(-(0.024 + radius), 0.0, -0.012) - _right.wrist
+		_item_anchor.rotation.y = 0.35
+		_fit_grip(_right, Vector2(_item_anchor.position.x, _item_anchor.position.z), radius)
 		# entra de baixo com um "pop"
-		_right.position = _base_right + Vector3(0, -0.2, 0.05)
+		_right.root.position = _base_right + Vector3(0, -0.2, 0.05)
 	poke()
 
 
@@ -225,6 +177,40 @@ static func _item_radius(item: Node3D) -> float:
 	return minf(r, 0.11)
 
 
+## Fecha cada dedo (no plano XZ da mão) até a falange encostar no cilindro do item.
+## `center`: eixo do item em coordenadas do osso da mão (x, z).
+func _fit_grip(a: _Arm, center: Vector2, radius: float) -> void:
+	a.grip_curl = []
+	for i in 4:
+		var contact: float = radius + FINGER_R[i] + 0.002
+		var p := Vector2(a.finger(i, 0).position.x, a.finger(i, 0).position.z)
+		var lens := [-a.finger(i, 1).position.z, -a.finger(i, 2).position.z, TIP_LEN[i]]
+		var prev := 0.0
+		var curls := []
+		for j in 3:
+			var l: float = lens[j]
+			var best := prev
+			var best_d := INF
+			var t := prev - 0.1
+			while t <= prev + 1.9:
+				var q := p + Vector2(-a.side * sin(t), -cos(t)) * l
+				var d := q.distance_to(center)
+				if d <= contact:
+					best = t
+					break
+				if d < best_d:
+					best_d = d
+					best = t
+				t += 0.02
+			curls.append(clampf(best - prev, -0.1, 1.9))
+			p += Vector2(-a.side * sin(best), -cos(best)) * l
+			prev = best
+		a.grip_curl.append(curls)
+	# dedão: contorna o lado da câmera (+Z) e cruza na frente do item
+	a.thumb_dir = Vector3(-a.side * 0.62, 0.12, 0.3 + radius * 4.0).normalized()
+	a.thumb_curl = clampf(0.9 - radius * 5.0, 0.2, 0.8)
+
+
 func set_pouring(on: bool) -> void:
 	_pouring = on
 
@@ -233,18 +219,49 @@ func poke() -> void:
 	_poke = 1.0
 
 
+## Monta a pose atual do braço: dedos (solta ↔ segurando), dedão e pulso.
+func _apply_pose(a: _Arm) -> void:
+	var g := a.grip
+	for i in 4:
+		for j in 3:
+			var relaxed: float = IDLE_CURL[j] + (0.05 * i if j == 0 else 0.0)
+			var held: float = a.grip_curl[i][j] if g > 0.0 else relaxed
+			a.finger(i, j).rotation = Vector3(0, a.side * lerpf(relaxed, held, g), 0)
+	var t_a: Node3D = a.nodes.t_a
+	if g > 0.0:
+		var rest_dir := -a.thumb_rest.z
+		var turn := Basis(Quaternion(rest_dir, a.thumb_dir))
+		t_a.basis = a.thumb_rest.slerp(turn * a.thumb_rest, g)
+	else:
+		t_a.basis = a.thumb_rest
+	(a.nodes.t_b as Node3D).rotation = Vector3(0, a.side * lerpf(0.3, a.thumb_curl, g), 0)
+	a.sync()
+
+
 func update_motion(delta: float, speed: float, bob_t: float) -> void:
 	_poke = maxf(_poke - delta * 5.0, 0.0)
 	_pour_blend = move_toward(_pour_blend, 1.0 if _pouring else 0.0, delta * 5.0)
+	_right.grip = move_toward(_right.grip, 1.0 if _item else 0.0, delta * 6.0)
 	var bob := Vector3(cos(bob_t * 0.5) * 0.012, -absf(sin(bob_t)) * 0.014, 0) * clampf(speed / 3.0, 0.0, 1.0)
 	var breathe := Vector3(0, sin(Time.get_ticks_msec() * 0.002) * 0.004, 0)
 	var poke_off := Vector3(0, 0.02, -0.07) * sin(_poke * PI)
 	var pour_off := Vector3(-0.12, 0.08, -0.08) * _pour_blend
 	var t := 1.0 - exp(-14.0 * delta)
-	_right.position = _right.position.lerp(_base_right + bob + breathe + poke_off + pour_off, t)
-	# servir: o punho vira a garrafa, o antebraço só acompanha um pouco
+	_right.root.position = _right.root.position.lerp(_base_right + bob + breathe + poke_off + pour_off, t)
+	_left.root.position = _left.root.position.lerp(_base_left + bob * 0.8 - breathe, t)
+	# servir: o antebraço gira em volta do próprio eixo e o punho acompanha
 	var wobble := sin(Time.get_ticks_msec() * 0.03) * 0.04 * _pour_blend
-	_right.rotation = Vector3(0, 0, _pour_blend * 0.3)
-	_right_grip.rotation.z = _pour_blend * 1.35 + wobble
-	_left.position = _left.position.lerp(_base_left + bob * 0.8 - breathe, t)
-	_left.visible = _item == null or _pour_blend < 0.5
+	_pose_arm(_right, _pour_blend * 1.35 + wobble)
+	_pose_arm(_left, 0.0)
+	_left.root.visible = _item == null or _pour_blend < 0.5
+
+
+## Gira o braço no pulso: solta = palma para baixo; segurando = costas da mão para a
+## câmera. `pour`: giro extra para virar a garrafa.
+func _pose_arm(a: _Arm, pour: float) -> void:
+	var idle := 1.0 - a.grip
+	var axis := Vector3(a.side * FORE_DIR.x, FORE_DIR.y, FORE_DIR.z).normalized()
+	var b := Basis(axis, a.side * 1.35 * idle + pour)
+	a.pose.transform = Transform3D(b, a.wrist - b * a.wrist)
+	(a.nodes.hand as Node3D).rotation = Vector3(-0.25 * idle, -a.side * 0.35 * a.grip, 0)
+	_apply_pose(a)

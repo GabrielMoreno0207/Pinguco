@@ -6,8 +6,9 @@ você precisa decifrar o que ele quer pela cor, pela letra, pelo símbolo e pelo
 
 Protótipo jogável feito em **Godot 4.7 (GDScript)**. Todo o conteúdo (modelos, texturas,
 sons e música) é gerado proceduralmente no código. As únicas exceções são duas fontes
-livres (OFL). As malhas dos fregueses são esculpidas por código fora do jogo
-(`tools/bake_customers.py`) e ficam gravadas em `assets/customers/`.
+livres (OFL). As malhas dos fregueses e das mãos do jogador são esculpidas por código fora
+do jogo (`tools/bake_customers.py` e `tools/bake_hands.py`) e ficam gravadas em
+`assets/customers/` e `assets/hands/`.
 
 ## Como rodar
 
@@ -133,9 +134,11 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   flâmula, calendário, relógio de parede que acompanha o turno, porta de enrolar e a rua lá
   fora. Piso de caquinhos vermelhos e azulejos são shaders procedurais.
 - **Jogador**: CharacterBody3D com WASD, mouse, gravidade, colisão, balanço de câmera,
-  passos, tremida de câmera e mãos em primeira pessoa (dedos com unhas e nós, antebraço
-  com manga dobrada e relógio). Elas fecham em volta da garrafa/copo, com o dedão cruzando
-  a frente, e o punho vira para servir. Paredes invisíveis mantêm o jogador atrás do balcão.
+  passos, tremida de câmera e mãos em primeira pessoa esculpidas (malha contínua com
+  esqueleto em cada falange, unhas, nós dos dedos, antebraço com pelinhos, manga dobrada e
+  relógio). Ao pegar algo, cada dedo fecha até encostar no item (o raio é medido pela malha,
+  então a mão abraça uma long neck ou abre numa jarra), o dedão cruza a frente, e o
+  antebraço gira para servir. Paredes invisíveis mantêm o jogador atrás do balcão.
 - **Interação**: raycast da câmera, destaque pulsante em amarelo no objeto mirado, prompt
   com a ação ("Pegar Cerveja", "Segure: Amassando o limão"), dicas quando a ação não é
   possível e anel de progresso na mira.
@@ -256,6 +259,7 @@ tools/
   sdf_sculpt.py                 escultura por SDF -> malha (marching cubes, decimação,
                                 regiões de material recortadas, pesos de esqueleto)
   bake_customers.py             os 6 fregueses; grava assets/customers/<perfil>.bin
+  bake_hands.py                 mãos do jogador; grava assets/hands/hand_r.bin e hand_l.bin
 ```
 
 - Os sistemas se comunicam por **sinais**. O HUD escuta `GameManager`, `ShiftManager` e

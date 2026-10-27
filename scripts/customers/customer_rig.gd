@@ -45,6 +45,8 @@ var hand_r: Node3D
 var belly: Node3D
 var mouth: Node3D
 var mouth_mesh: MeshInstance3D
+## Dentes de cima (abrem junto com a boca; fechada, somem).
+var teeth: Node3D
 var lip_low: Node3D
 var lip_low_l: Node3D
 var lip_low_r: Node3D
@@ -107,7 +109,7 @@ func build(p: CustomerProfile, variation_seed := 0) -> void:
 	# um pouquinho de variação de altura entre fregueses
 	scale = Vector3.ONE * _rng.randf_range(0.97, 1.03)
 
-	_model = _load_model(FILES[p.body])
+	_model = load_model(FILES[p.body])
 	_build_nodes()
 	_build_meshes()
 	Mats.plastic = true
@@ -295,7 +297,7 @@ func _build_face(p: CustomerProfile) -> void:
 		low.material_override = face_mat
 		low.visible = false
 		# maçã do rosto que só aparece no sorriso (bochecha levantada)
-		var apple := Mats.sphere(head, 0.045, ec + Vector3(side * 0.035, -er * 1.25, 0.012), skin, false, Vector3(1.2, 0.8, 0.6))
+		var apple := Mats.sphere(head, 0.045, ec + Vector3(side * 0.03, -er * 1.3, 0.03), skin, false, Vector3(1.2, 0.8, 0.5))
 		apple.material_override = face_mat
 		apple.visible = false
 		if p.body == CustomerProfile.Body.FOFOQUEIRA:
@@ -322,9 +324,12 @@ func _build_face(p: CustomerProfile) -> void:
 	# interior da boca: fundo escuro, língua e dentes (os lábios vêm do modelo)
 	mouth_mesh = Mats.sphere(mouth, 0.042, Vector3.ZERO, Color(0.3, 0.07, 0.08), false, Vector3(1.4, 0.35, 0.5))
 	Mats.sphere(mouth_mesh, 0.028, Vector3(0, -0.02, -0.008), Color(0.9, 0.4, 0.45), false)
-	Mats.box(mouth, Vector3(0.06, 0.012, 0.018), Vector3(0, 0.008, -0.012), Color.WHITE, false)
+	teeth = Node3D.new()
+	teeth.position = Vector3(0, 0.008, -0.012)
+	mouth.add_child(teeth)
+	Mats.box(teeth, Vector3(0.05, 0.012, 0.018), Vector3.ZERO, Color.WHITE, false)
 	if p.body == CustomerProfile.Body.MALANDRO:
-		Mats.box(mouth, Vector3(0.014, 0.0125, 0.019), Vector3(0.019, 0.008, -0.0125), Color(1.0, 0.8, 0.2), false)
+		Mats.box(teeth, Vector3(0.012, 0.0125, 0.019), Vector3(0.016, 0.0, -0.0005), Color(1.0, 0.8, 0.2), false)
 	if p.body == CustomerProfile.Body.FOFOQUEIRA:
 		mouth_mesh.material_override = Mats.plastic_mat(Color(0.45, 0.05, 0.1))
 	if p.body == CustomerProfile.Body.FALANTE:
@@ -389,10 +394,10 @@ func _build_extras(p: CustomerProfile) -> void:
 # ------------------------------------------------------------------ arquivo
 
 ## Lê (uma vez por perfil) o modelo esculpido: nós, âncoras, cores fixas e malhas.
-static func _load_model(id: String) -> Dictionary:
+static func load_model(id: String, dir := DATA_DIR) -> Dictionary:
 	if _models.has(id):
 		return _models[id]
-	var raw := FileAccess.get_file_as_bytes(DATA_DIR + id + ".bin")
+	var raw := FileAccess.get_file_as_bytes(dir + id + ".bin")
 	assert(not raw.is_empty(), "Modelo de freguês ausente: rode tools/bake_customers.py")
 	var r := _Reader.new(raw.decompress_dynamic(-1, FileAccess.COMPRESSION_GZIP))
 	assert(r.bytes(4).get_string_from_ascii() == "PGC1")
@@ -512,12 +517,12 @@ func set_expression(happy: float, angry: float, drunk: float) -> void:
 	var low := clampf(_x_happy * 0.6 + _x_angry * 0.35, 0.0, 1.0)
 	for l: MeshInstance3D in [lower_lid_l, lower_lid_r]:
 		l.visible = low > 0.04
-		l.scale.y = lerpf(0.2, 0.62, low)
+		l.scale.y = lerpf(0.2, 0.5, low)
 		l.position.y = _eye_y - EYE_R * 0.8 + low * EYE_R * 0.3
 	for a: MeshInstance3D in [apple_l, apple_r]:
 		a.visible = _x_happy > 0.05
-		a.scale = Vector3(1.2, 0.8, 0.6) * lerpf(0.4, 1.0, _x_happy)
-		a.position.y = _eye_y - EYE_R * 1.25 + _x_happy * 0.012
+		a.scale = Vector3(1.2, 0.8, 0.5) * lerpf(0.4, 1.0, _x_happy)
+		a.position.y = _eye_y - EYE_R * 1.3 + _x_happy * 0.01
 
 
 ## lid = 0 aberto … 1 fechado
@@ -551,6 +556,9 @@ func set_mouth(open: float, smile: float) -> void:
 	open = clampf(maxf(open * (1.0 - _x_angry * 0.4), _x_drunk * 0.35 + maxf(smile, 0.0) * 0.4), 0.0, 1.0)
 	var h := 0.3 + open * 1.1
 	mouth_mesh.scale = Vector3(1.4 + smile * 0.3, h, 0.5)
+	# dentes só com a boca aberta, e nunca mais largos que ela (não vazam pelos cantos)
+	teeth.visible = open > 0.12
+	teeth.scale = Vector3(clampf(0.7 + smile * 0.3 + open * 0.3, 0.6, 1.1), clampf(open * 1.5, 0.3, 1.0), 1.0)
 	mouth.position.y = _mouth_y - open * 0.015
 	# boca torta: bêbado (sorriso de lado) e bravo (cantinho caído)
 	mouth.rotation.z = _x_drunk * 0.2 - _x_angry * 0.1

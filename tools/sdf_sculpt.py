@@ -466,11 +466,13 @@ class Sculpt:
             out.append(s)
         return out
 
-    def _weights(self, V, bones, falloff=0.022):
+    def _weights(self, V, bones):
         """Pesos pela distância às primitivas de cada osso. O osso "dono" é o da
         primitiva mais próxima; só ossos vizinhos dele (pai/filho) entram na mistura,
         para o braço não grudar na barriga nem uma coxa na outra. Primitivas com
-        `bone` chamável (saia) devolvem os próprios pesos."""
+        `bone` chamável (saia) devolvem os próprios pesos. `self.falloff` controla a
+        largura da transição entre ossos (peças finas, como dedos, pedem menos)."""
+        falloff = getattr(self, 'falloff', 0.022)
         nb = len(bones)
         adj = getattr(self, 'adjacent', None) or set()
         D = np.full((len(V), nb), np.inf)

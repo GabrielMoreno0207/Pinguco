@@ -100,7 +100,7 @@ class Model:
 
     def part(self, name, node, s, skinned=False, tris=None):
         if tris is None:
-            tris = {'body': 9000, 'head': 5000}.get(name, 900 if name.startswith('hand') else 300)
+            tris = {'body': 16000, 'head': 10000}.get(name, 1800 if name.startswith('hand') else 400)
         self.parts.append((name, node, s, skinned, tris))
 
     def anchor(self, name, node, pos, normal=(0, 0, -1)):
@@ -186,29 +186,42 @@ def band(m, s, ft, y, hw, out, region, rnd=0.004):
     s.custom(ft, fn, (-rx, y - hw, zc - az), (rx, y + hw, zc + az), region, op='hard')
 
 
-def chain(s, ft, y0, w, drop, r, region, n=15, beads=False):
+def chain(m, s, ft, y0, w, drop, r, region, n=15, beads=False):
+    """Cordão em "U" deitado no peito. Fino demais para o voxel do corpo, então vira
+    uma peça própria presa no tronco (coordenadas locais do tronco). Devolve a peça e
+    o referencial dela, para os pingentes."""
     pts = []
     for i in range(n):
         a = -1.25 + 2.5 * i / (n - 1)
         x = math.sin(a) * w
-        y = y0 - (1 - math.cos(a)) / (1 - math.cos(1.25)) * drop
-        pts.append(s.surf(ft, (x * 0.5, y, 0.0), (x * 0.5, 0, -0.2), out=r * 0.6))
+        # pontas no pescoço, meio caído no peito
+        y = y0 - (math.cos(a) - math.cos(1.25)) / (1 - math.cos(1.25)) * drop
+        pts.append(s.surf(ft, (x * 0.5, y, 0.0), (x * 0.5, 0, -0.2), out=r * 0.7))
+    cs = m.sculpt(0.0012)
+    F = Frame()
     if beads:
         for p in pts:
-            s.ell(ft, p, r, region, op='hard')
+            cs.ell(F, p, r, region, op='hard')
     else:
-        s.tube(ft, pts, r, region, op='hard', join=r * 0.5)
-    return pts
+        cs.tube(F, pts, r, region, join=r * 0.8)
+    m.part('chain', 'torso', cs, tris=1400)
+    return cs, F, pts
 
 
 def arms(m, s, F, sleeve):
     t = m.pp['thick']
-    for sd in ('l', 'r'):
+    bw, h = m.pp['bw'], m.pp['h']
+    ft = F['torso']
+    for sd, side in (('l', -1), ('r', 1)):
         fa, ff = F['arm_' + sd], F['fore_' + sd]
         up = SHIRT if sleeve == 2 else SKIN
-        s.ell(fa, (0, -0.01, 0), 0.06 * t, SKIN if sleeve == 0 else SHIRT, k=0.05)
-        s.cone(fa, (0, -0.03, 0), (0, -0.25, 0), 0.048 * t, 0.042 * t, up, k=0.03)
-        s.cone(ff, (0, 0.0, 0), (0, -0.228, 0), 0.042 * t, 0.031 * t, up, k=0.03)
+        # ombro de verdade: trapézio descendo do pescoço até a junta (no tronco) e
+        # deltoide por cima da junta (no braço), para o braço não sair de uma bolinha
+        sh = (side * 0.26 * bw, 0.52 * h, 0)
+        s.cone(ft, (side * 0.07, 0.56 * h, 0.01), (sh[0] * 0.92, sh[1] - 0.005, 0.0), 0.05 * t, 0.058 * t, SHIRT, k=0.06)
+        s.ell(fa, (side * 0.006, -0.025, 0), (0.064 * t, 0.075 * t, 0.06 * t), SKIN if sleeve == 0 else SHIRT, k=0.05)
+        s.cone(fa, (0, -0.03, 0), (0, -0.25, 0), 0.054 * t, 0.045 * t, up, k=0.035)
+        s.cone(ff, (0, 0.0, 0), (0, -0.228, 0), 0.046 * t, 0.033 * t, up, k=0.035)
         if sleeve == 1:
             s.cone(fa, (0, 0.0, 0), (0, -0.14, 0), 0.066 * t, 0.06 * t, SHIRT, op='hard')
             s.torus(fa, (0, -0.133, 0), 0.058 * t, 0.007, SHIRT_DARK, op='hard')
@@ -322,21 +335,21 @@ def face_nodes(m, head_s, F, r, hs, fy, fz):
     zm = head_s.surf(F, (0, mouth_y, 0), (0, 0, -1))[2]
     m.node('mouth', 'head', t=(0, mouth_y, zm + 0.02))
     lip = m.pal.fx('lipstick', (0.85, 0.1, 0.25)) if m.pid == 'fofoqueira' else LIP
-    lt = 0.011 if m.pid == 'fofoqueira' else 0.0065
-    lr = 0.014 if m.pid == 'fofoqueira' else 0.0085
+    lt = 0.0085 if m.pid == 'fofoqueira' else 0.0045
+    lr = 0.011 if m.pid == 'fofoqueira' else 0.0058
     for sd, side in (('l', -1), ('r', 1)):
         m.node('lip_up_' + sd, 'mouth', t=(side * 0.007, 0.016, -0.022))
         s = m.sculpt(0.0009)
         s.tube(Frame(), [(side * 0.0, 0.0, 0.0), (side * 0.024, -0.001, 0.002), (side * 0.046, -0.008, 0.011)],
                [lt, lt * 0.95, lt * 0.45], lip, join=0.006)
-        m.part('lip_up_' + sd, 'lip_up_' + sd, s, tris=160)
+        m.part('lip_up_' + sd, 'lip_up_' + sd, s, tris=320)
     m.node('lip_low', 'mouth', t=(0, -0.018, -0.018))
     for sd, side in (('l', -1), ('r', 1)):
         m.node('lip_low_' + sd, 'lip_low')
         s = m.sculpt(0.0009)
         s.tube(Frame(), [(-side * 0.002, 0.0, 0.0), (side * 0.02, -0.001, 0.002), (side * 0.038, 0.002, 0.008)],
                [lr, lr * 0.95, lr * 0.45], lip, join=0.006)
-        m.part('lip_low_' + sd, 'lip_low_' + sd, s, tris=160)
+        m.part('lip_low_' + sd, 'lip_low_' + sd, s, tris=320)
     for sd, side in (('l', -1), ('r', 1)):
         p = head_s.surf(F, (side * 0.13 * hs[0], fy - 0.07, 0), (0, 0, -1))
         m.anchor('cheek_' + sd, 'head', p)
@@ -345,28 +358,44 @@ def face_nodes(m, head_s, F, r, hs, fy, fz):
 # ================================================================== mãos
 
 def hand_part(m, side, extras=None):
+    """Mão de boneco de vinil: palma cheia, quatro dedos juntinhos e meio dobrados
+    (separados por um sulco) e dedão bem destacado na frente. Palma para -X*side,
+    dedos descendo (-Y) e empilhados em Z (indicador na frente, -Z)."""
     t = m.pp['thick']
     sc = 0.92 + (t - 1.0) * 0.6
-    s = m.sculpt(0.0025)
+    s = m.sculpt(0.0013)
     F = Frame()
-    s.cone(F, (0, 0.04, 0), (0, -0.02, 0), 0.031 * t, 0.029 * sc, SKIN)
-    s.ell(F, (0, -0.037 * sc, 0), (0.03 * sc, 0.05 * sc, 0.05 * sc), SKIN, k=0.022)
-    lens = [0.03, 0.034, 0.032, 0.025]
+    lens = [(0.03, 0.021, 0.017), (0.033, 0.023, 0.018), (0.031, 0.022, 0.017), (0.025, 0.018, 0.015)]
+    curls = [(0.16, 0.3, 0.2), (0.2, 0.34, 0.24), (0.26, 0.38, 0.28), (0.34, 0.42, 0.3)]
     tips = []
+    knuckles = []
+    # dedos primeiro, sem fusão entre eles (o sulco entre um e outro fica marcado)
     for i in range(4):
-        z = (-0.033 + i * 0.022) * sc
-        base = np.array([-side * 0.004 * sc, -0.072 * sc, z])
-        ln = lens[i] * sc
-        mid = base + np.array([-side * 0.35, -1.0, 0]) / np.linalg.norm([0.35, 1.0]) * ln
-        tip = mid + np.array([-side * 1.0, -0.45, 0]) / np.linalg.norm([1.0, 0.45]) * ln * 0.85
-        rr = (0.0102 if i < 3 else 0.0092) * sc
-        s.tube(F, [base, mid, tip], [rr, rr * 0.97, rr * 0.9], SKIN, k=0.005, join=0.006)
-        tips.append(tip)
-    t0 = np.array([-side * 0.012, -0.025, -0.035]) * sc
-    t1 = np.array([-side * 0.035, -0.06, -0.05]) * sc
-    t2 = np.array([-side * 0.05, -0.085, -0.038]) * sc
-    s.tube(F, [t0, t1, t2], [0.016 * sc, 0.0135 * sc, 0.0118 * sc], SKIN, k=0.012, join=0.008)
-    tips.append(t2)
+        rr = (0.0104 if i < 3 else 0.0094) * sc
+        p = np.array([-side * 0.001 * sc, -0.06 * sc, (-0.0318 + i * 0.0212) * sc])
+        pts = [p]
+        ang = 0.0
+        for j in range(3):
+            ang += curls[i][j]
+            d = np.array([-side * math.sin(ang), -math.cos(ang), (i - 1.5) * 0.04])
+            p = p + d / np.linalg.norm(d) * lens[i][j] * sc
+            pts.append(p)
+        s.tube(F, pts, [rr, rr * 0.98, rr * 0.95, rr * 0.92], SKIN, join=0.003)
+        tips.append(pts[-1])
+        knuckles.append(pts[0])
+    # pulso, palma (une suave nos dedos) e nós dos dedos nas costas da mão
+    s.cone(F, (0, 0.045, 0), (0, -0.008, 0), 0.029 * t, 0.025 * sc, SKIN, k=0.01)
+    s.box(F, (side * 0.001 * sc, -0.034 * sc, 0), (0.0165 * sc, 0.029 * sc, 0.04 * sc), 0.015 * sc, SKIN, k=0.012)
+    for kn in knuckles:
+        s.ell(F, kn + np.array([side * 0.007, 0.004, 0]) * sc, (0.0075 * sc, 0.009 * sc, 0.0095 * sc), SKIN, k=0.005)
+    # monte e dedão (na frente, dobrando para o lado da palma)
+    s.ell(F, (-side * 0.008 * sc, -0.028 * sc, -0.028 * sc), (0.016 * sc, 0.028 * sc, 0.019 * sc), SKIN, k=0.012)
+    t0 = np.array([-side * 0.01, -0.03, -0.038]) * sc
+    t1 = t0 + np.array([-side * 0.3, -0.85, -0.3]) / np.linalg.norm([0.3, 0.85, 0.3]) * 0.024 * sc
+    t2 = t1 + np.array([-side * 0.42, -0.86, -0.08]) / np.linalg.norm([0.42, 0.86, 0.08]) * 0.02 * sc
+    t3 = t2 + np.array([-side * 0.55, -0.82, 0.05]) / np.linalg.norm([0.55, 0.82, 0.05]) * 0.015 * sc
+    s.tube(F, [t0, t1, t2, t3], [0.0145 * sc, 0.013 * sc, 0.0118 * sc, 0.0108 * sc], SKIN, k=0.008, join=0.004)
+    tips.append(t3)
     if extras:
         extras(s, F, tips, sc)
     return s
@@ -378,7 +407,7 @@ def model_tiozao(m, F):
     pp = m.pp
     h, bw = pp['h'], pp['bw']
     pal = m.pal
-    s = m.sculpt(0.006)
+    s = m.sculpt(0.0045)
     ft = F['torso']
     torso_base(m, s, F)
     m.node('belly', 'torso', np.diag([1.0, 0.9, 0.95]), (0, 0.2, -0.1), bone=True)
@@ -402,9 +431,11 @@ def model_tiozao(m, F):
     s.paint({SHIRT}, dots([ft.to_world(stain[1])], 0.016), pal.fx('stain', (0.75, 0.45, 0.2)))
     # cordão com medalha
     gold = pal.fx('gold', GOLD, rough=0.3)
-    chain(s, ft, 0.52 * h, 0.08, 0.1, 0.007, gold)
-    mp = s.surf(ft, (0, 0.41 * h, 0), (0, 0, -1), out=0.006)
-    s.cyl(ft, mp, 0.026, 0.004, 0.003, gold, axis='z', op='hard')
+    cs, cf, pts = chain(m, s, ft, 0.55 * h, 0.08, 0.11, 0.0028, gold)
+    mp = pts[len(pts) // 2] + np.array([0, -0.022, -0.004])
+    cs.cyl(cf, mp, 0.019, 0.003, 0.002, gold, axis='z', op='hard')
+    cs.cyl(cf, mp + np.array([0, 0, -0.003]), 0.012, 0.0015, 0.001, gold, axis='z', k=0.002, op='sub')
+    cs.torus(cf, mp + np.array([0, 0.02, 0]), 0.004, 0.0015, gold, axis='z', op='hard')
     # carteira no bolso de trás
     zb = s.surf(ft, (0.09 * bw, -0.01, 0), (0, 0, 1))[2]
     s.box(ft, (0.09 * bw, -0.01, zb + 0.008), (0.045, 0.03, 0.012), 0.006, pal.fx('wallet', (0.35, 0.2, 0.1)), op='hard')
@@ -425,7 +456,7 @@ def model_tiozao(m, F):
         s.paint({SKIN}, dots(hair, 0.0045), HAIR_DARK, (lambda f: lambda P: f.to_local(P)[:, 2] < -0.02)(fk))
     m.part('body', None, s, True)
 
-    hs_ = m.sculpt(0.004)
+    hs_ = m.sculpt(0.003)
     Fh, r, hs, fy, fz = head_base(m, hs_)
     # coroinha de cabelo em tufos, bigodão, papada, rugas e caneta atrás da orelha
     for i in range(13):
@@ -468,7 +499,7 @@ def model_valentao(m, F):
     pp = m.pp
     h, bw, t = pp['h'], pp['bw'], pp['thick']
     pal = m.pal
-    s = m.sculpt(0.006)
+    s = m.sculpt(0.0045)
     ft = F['torso']
     torso_base(m, s, F)
     tl = (lambda P: ft.to_local(P))
@@ -496,9 +527,11 @@ def model_valentao(m, F):
                k=0.006, op='sub')
     s.tube(ft, [s.surf(ft, (0, y * h, 0), (0, 0, -1)) for y in np.linspace(0.13, 0.31, 4)], 0.004, 0, k=0.006, op='sub')
     gold = pal.fx('gold', GOLD, rough=0.3)
-    chain(s, ft, 0.53 * h, 0.12, 0.12, 0.012, gold)
-    p = s.surf(ft, (0, 0.4 * h, 0), (0, 0, -1), out=0.01)
-    s.box(ft, p, (0.024, 0.03, 0.007), 0.005, gold, op='hard')
+    cs, cf, pts = chain(m, s, ft, 0.56 * h, 0.11, 0.13, 0.0042, gold, n=19)
+    p = pts[len(pts) // 2] + np.array([0, -0.032, -0.005])
+    cs.box(cf, p, (0.02, 0.026, 0.005), 0.004, gold, op='hard')
+    cs.box(cf, p + np.array([0, 0, -0.005]), (0.012, 0.018, 0.002), 0.002, gold, k=0.002, op='sub')
+    cs.torus(cf, p + np.array([0, 0.03, 0]), 0.006, 0.0022, gold, axis='z', op='hard')
     # munhequeira vermelha, bracelete de ouro, tribal no braço esquerdo
     s.cone(F['fore_r'], (0, -0.155, 0), (0, -0.205, 0), 0.047, 0.045, pal.fx('wristband', (0.85, 0.15, 0.15)), op='hard')
     s.torus(F['fore_l'], (0, -0.19, 0), 0.042, 0.008, gold, op='hard')
@@ -521,7 +554,7 @@ def model_valentao(m, F):
         boot(m, s, F['knee_' + sd], (0.13, 0.1, 0.08))
     m.part('body', None, s, True)
 
-    hs_ = m.sculpt(0.004)
+    hs_ = m.sculpt(0.003)
     Fh, r, hs, fy, fz = head_base(m, hs_)
     sc = np.array([0, r, 0])
     # cabelo raspado (pintado) + boné aba reta virado pra trás
@@ -577,7 +610,7 @@ def model_falante(m, F):
     pp = m.pp
     h, bw = pp['h'], pp['bw']
     pal = m.pal
-    s = m.sculpt(0.006)
+    s = m.sculpt(0.0045)
     ft = F['torso']
     torso_base(m, s, F)
     arms(m, s, F, 1)
@@ -624,7 +657,7 @@ def model_falante(m, F):
         shoe(m, s, F['knee_' + sd], 'dress', (0.35, 0.2, 0.1))
     m.part('body', None, s, True)
 
-    hs_ = m.sculpt(0.004)
+    hs_ = m.sculpt(0.003)
     Fh, r, hs, fy, fz = head_base(m, hs_)
     # cabelo com topete alto em mechas + costeletas
     rr = (r * hs[0] * 1.03, r * hs[1] * 1.03, r * hs[2] * 1.03)
@@ -660,7 +693,7 @@ def model_fofoqueira(m, F):
     pp = m.pp
     h, bw = pp['h'], pp['bw']
     pal = m.pal
-    s = m.sculpt(0.006)
+    s = m.sculpt(0.0045)
     ft = F['torso']
     torso_base(m, s, F, belt=False, hem=False)
     arms(m, s, F, 2)
@@ -676,7 +709,7 @@ def model_fofoqueira(m, F):
         y = 0.47 * h + 2.4 * x * x - 0.006
         p = s.surf(ft, (x * 0.6, y, 0), (x * 0.4, 0, -0.25), out=-0.004)
         s.ell(ft, p, (0.026, 0.02, 0.016), SHIRT_LIGHT, k=0.012)
-    chain(s, ft, 0.535 * h, 0.075, 0.06, 0.0095, pal.fx('pearl', (1.0, 0.98, 0.92), rough=0.25), n=13, beads=True)
+    chain(m, s, ft, 0.55 * h, 0.075, 0.07, 0.0085, pal.fx('pearl', (1.0, 0.98, 0.92), rough=0.25), n=15, beads=True)
     # saia rodada (cós + bolinhas), meia-calça e scarpin
     skirt = PANTS
     rx = 0.2 * pp['hip'] * bw * 1.06
@@ -723,7 +756,7 @@ def model_fofoqueira(m, F):
            pal.fx('bag_strap', (0.55, 0.38, 0.1)), op='hard')
     m.part('body', None, s, True)
 
-    hs_ = m.sculpt(0.004)
+    hs_ = m.sculpt(0.003)
     Fh, r, hs, fy, fz = head_base(m, hs_)
     # cabelão armado em cachos com coque, franja, bobes, argolas e pinta
     for i in range(18):
@@ -759,7 +792,7 @@ def model_universitario(m, F):
     pp = m.pp
     h, bw = pp['h'], pp['bw']
     pal = m.pal
-    s = m.sculpt(0.006)
+    s = m.sculpt(0.0045)
     ft = F['torso']
     torso_base(m, s, F, belt=False, hem=False)
     tl = (lambda P: ft.to_local(P))
@@ -807,7 +840,7 @@ def model_universitario(m, F):
         shoe(m, s, F['knee_' + sd], 'sneaker', (0.95, 0.95, 0.95), sole=(0.96, 0.96, 0.96))
     m.part('body', None, s, True)
 
-    hs_ = m.sculpt(0.004)
+    hs_ = m.sculpt(0.003)
     Fh, r, hs, fy, fz = head_base(m, hs_)
     # touca canelada com pompom, costeletas, cavanhaque, bigodinho e olheiras
     beanie = pal.fx('beanie', [(0.85, 0.2, 0.2), (0.95, 0.75, 0.15), (0.2, 0.55, 0.35)], group='beanie')
@@ -821,7 +854,7 @@ def model_universitario(m, F):
         d = (np.sqrt(np.einsum('ij,ij->i', q, q)) - 1.0) * min(rr)
         return np.maximum(d, e - Q[:, 1])
     hs_.custom(fc, bean, (-rr[0], e, -rr[2]), rr, beanie, k=0.004)
-    cr = r * hs[0] * 1.06 * math.cos(math.radians(20)) + 0.01
+    cr = r * max(hs[0], hs[2]) * 1.06 * math.cos(math.radians(20)) + 0.013
     hs_.cyl(fc, (0, e + 0.032, 0), cr, 0.036, 0.016, beanie_d, op='hard')
     yc = e + 0.032
 
@@ -856,7 +889,7 @@ def model_malandro(m, F):
     pp = m.pp
     h, bw = pp['h'], pp['bw']
     pal = m.pal
-    s = m.sculpt(0.006)
+    s = m.sculpt(0.0045)
     ft = F['torso']
     torso_base(m, s, F)
     arms(m, s, F, 1)
@@ -867,7 +900,7 @@ def model_malandro(m, F):
     s.paint({SHIRT}, lambda P: np.sin((P[:, 1] - HIP_Y - 0.1) * math.tau / 0.075), white,
             lambda P: P[:, 1] > HIP_Y + 0.085)
     gold = pal.fx('gold', GOLD, rough=0.3)
-    chain(s, ft, 0.5 * h, 0.06, 0.09, 0.006, gold)
+    chain(m, s, ft, 0.53 * h, 0.065, 0.1, 0.0024, gold, n=17)
     pk = s.surf(ft, (-0.1 * bw, 0.4 * h, 0), (0, 0, -1))
     s.box(ft, pk, (0.035, 0.035, 0.006), 0.004, SHIRT_DARK, k=0.003)
     for k in range(3):
@@ -882,7 +915,7 @@ def model_malandro(m, F):
         shoe(m, s, F['knee_' + sd], 'dress', (0.98, 0.98, 0.96))
     m.part('body', None, s, True)
 
-    hs_ = m.sculpt(0.004)
+    hs_ = m.sculpt(0.003)
     Fh, r, hs, fy, fz = head_base(m, hs_)
     # cabelo na régua (casquete), costeletas e bigodinho fino
     rr = (r * hs[0] * 1.015, r * hs[1] * 1.015, r * hs[2] * 1.015)
@@ -904,7 +937,7 @@ def model_malandro(m, F):
     m.part('head', 'head', hs_)
     # chapéu panamá com fita
     m.node('hat', 'head', rot_z(0.12), (0, r + r * hs[1] * 0.55, 0))
-    hs2 = m.sculpt(0.003)
+    hs2 = m.sculpt(0.002)
     Fp = Frame()
     straw = pal.fx('straw', (0.97, 0.94, 0.85))
     # aba levemente virada para cima nas laterais, copa baixa com vinco em cima
@@ -918,8 +951,9 @@ def model_malandro(m, F):
     hs2.custom(Fp, f_capcone((0, 0.08, 0), 0.075, r * 0.86, r * 0.74, 0.03), (-r * 0.87, 0.0, -r * 0.87),
                (r * 0.87, 0.16, r * 0.87), straw, k=0.025)
     hs2.ell(Fp, (0, 0.166, 0), (0.035, 0.018, 0.11), 0, k=0.025, op='sub')
-    hs2.cyl(Fp, (0, 0.03, 0), r * 0.875, 0.016, 0.006, pal.fx('hat_band', (0.1, 0.08, 0.08)), op='hard')
-    m.part('panama', 'hat', hs2, tris=2200)
+    hs2.paint({straw}, lambda P: np.abs(P[:, 1] - 0.03) - 0.015, pal.fx('hat_band', (0.1, 0.08, 0.08)),
+              lambda P: np.sqrt(P[:, 0] ** 2 + P[:, 2] ** 2) < r * 0.93)
+    m.part('panama', 'hat', hs2, tris=6000)
     m.ring = True
 
 
@@ -951,7 +985,7 @@ def _str(b, s):
     b += struct.pack('<B', len(e)) + e
 
 
-def write(m):
+def write(m, out_dir=OUT_DIR):
     bones = [n[0] for n in m.nodes if n[4]]
     names = [n[0] for n in m.nodes]
     b = bytearray(b'PGC1')
@@ -987,8 +1021,8 @@ def write(m):
             if skinned:
                 b += sf['bones'].astype('<i4').tobytes() + sf['weights'].astype('<f4').tobytes()
             b += sf['idx'].astype('<i4').tobytes()
-    os.makedirs(OUT_DIR, exist_ok=True)
-    path = os.path.join(OUT_DIR, m.pid + '.bin')
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, m.pid + '.bin')
     with open(path, 'wb') as f:
         f.write(gzip.compress(bytes(b), 9, mtime=0))
     print('%-14s %7d triângulos  %6.0f KB' % (m.pid, tris, os.path.getsize(path) / 1024))
