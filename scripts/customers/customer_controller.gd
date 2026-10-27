@@ -571,12 +571,12 @@ func _profile_gestures(arm_l: Vector3, arm_r: Vector3, st: int) -> void:
 			if _happy > 0.3 and rig.hat:
 				# levanta o chapéu: "categoria!"
 				arm_r = Vector3(2.9, 0, 0.3)
-				rig.hat.position.y = 0.3875 + sin(_happy * PI) * 0.06
+				rig.hat.position.y = rig.hat_rest_y + sin(_happy * PI) * 0.06
 			else:
 				# batucando o samba no balcão
 				arm_r = Vector3(1.05 + absf(sin(_t * 7.0)) * 0.25, 0, 0.08)
 				if rig.hat:
-					rig.hat.position.y = 0.3875
+					rig.hat.position.y = rig.hat_rest_y
 	if is_hungry() and not talking and _happy < 0.3 and profile.body != CustomerProfile.Body.UNIVERSITARIO:
 		arm_l = Vector3(0.75, 0, 0.75 + sin(_t * 4.0) * 0.1) # mão na barriga: tá com fome
 	if _wake_anim > 0.0:
