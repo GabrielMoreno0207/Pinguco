@@ -13,11 +13,18 @@ do jogo (`tools/bake_customers.py` e `tools/bake_hands.py`) e ficam gravadas em
 ## Como rodar
 
 1. Instale o [Godot 4.7](https://godotengine.org/download) (versão padrão, não a .NET).
-   Neste repositório o executável fica em `../godot/`, que está fora do controle de versão.
-2. Abra `pinguco/project.godot` no editor e aperte **F5**, ou rode pela linha de comando:
+   O executável fica fora do controle de versão; aponte `godot` para onde você o salvou.
+2. Num clone novo, importe uma vez. A pasta `.godot/` não é versionada, e sem ela o Godot
+   não conhece as classes do projeto: o jogo abre numa tela preta.
 
 ```bash
-godot --path pinguco
+godot --headless --path . --import
+```
+
+3. Abra `project.godot` no editor e aperte **F5**, ou rode pela linha de comando:
+
+```bash
+godot --path .
 ```
 
 ### Controles
@@ -110,17 +117,17 @@ Dia, ponto, saldo, gaveta, melhorias e arrumação ficam salvos em `user://bar_p
 # headless: 47 verificações de ponta a ponta (movimento, raycast, preparo, entrega,
 # validação, atraso, embriaguez individual, fome/salgados, capotar, liberar banqueta,
 # fim de turno)
-godot --headless --path pinguco -- --autotest
+godot --headless --path . -- --autotest
 
 # com janela, salvando screenshots em user://shots
-godot --path pinguco -- --autotest --shots
+godot --path . -- --autotest --shots
 
 # benchmark de FPS
-godot --path pinguco -- --bench
+godot --path . -- --bench
 
 # vitrine: garrafas, mãos, fichas, os 6 fregueses (de frente, 3/4, perfil, sentados) e as
 # expressões neutro/feliz/bravo/bêbado de cada um em user://shots/gallery_*
-godot --path pinguco -- --gallery
+godot --path . -- --gallery
 ```
 
 Outras opções: `-- --low` força o modo leve e `-- --high` força o modo completo.
@@ -280,7 +287,7 @@ tools/
   suave de primitivas num campo de distância: o script extrai a malha, simplifica, recorta
   as bordas de cor (roupa, cabelo, listras, bolinhas) e calcula os pesos do esqueleto. A
   escultura é feita em pose A (braços e pernas afastados) para nada se fundir com o
-  tronco. Confira com `godot --path pinguco -- --gallery`.
+  tronco. Confira com `godot --path . -- --gallery`.
 - **Exportar o jogo**: os `.bin` não são recursos do Godot. No preset de exportação, inclua
   `assets/customers/*.bin` em *Filtros para exportar arquivos/pastas não-recurso*.
 - **Mexer no ícone**: edite `tools/make_icon.py` e rode `python tools/make_icon.py` (precisa de
