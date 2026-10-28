@@ -230,11 +230,13 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   acerto/erro/atraso com combo, telas de início, pausa e resultados (com título de
   ranking).
 - **Áudio**: arquitetura de buses (Music, SFX, Voice, Ambience) e registro por nome. Se
-  existir `assets/audio/<nome>.ogg|.wav`, ele é usado. Caso contrário, um placeholder é
-  sintetizado: tilintar de copo, garrafa, líquido, acerto, erro, atraso, moedas, campainha,
-  passos, vidro quebrando, vozes cartunescas em "sílabas" (tom por perfil, arrastadas
-  quando bêbados), risadas, resmungos, ronco, burburinho de bar e um rádio tocando pagode
-  (surdo, pandeiro, tamborim e cavaquinho em Karplus-Strong).
+  existir `assets/audio/<nome>.ogg|.wav|.mp3`, ele é usado. Já vêm gravados: servir
+  (`pour`), caixa registradora (`coin`), sininho da porta (`doorbell`), vidro quebrando
+  (`glass_break`), a música do expediente (`music`, "Noite de Barzinho") e a do menu
+  (`music_menu`, phonk) — trocadas com crossfade (créditos em `assets/audio/CREDITS.txt`).
+  O resto é sintetizado: tilintar de copo, garrafa, acerto, erro, atraso, passos, vozes
+  cartunescas em "sílabas" (tom por perfil, arrastadas quando bêbados), risadas, resmungos,
+  ronco e burburinho de bar.
 
 ## Arquitetura
 

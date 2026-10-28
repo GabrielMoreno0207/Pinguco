@@ -2,11 +2,15 @@ extends Node
 ## AudioManager (autoload): registro de sons por nome, buses e reprodução 2D/3D.
 ## Se existir res://assets/audio/<nome>.ogg ou .wav, ele é usado; senão um placeholder
 ## é sintetizado em runtime (o jogo nunca espera por assets de áudio).
+## Música: uma faixa por vez (play_music), trocada com crossfade.
 
 const AUDIO_DIR := "res://assets/audio"
 const RATE := 22050
 const BUSES := ["Music", "SFX", "Voice", "Ambience"]
 const POOL_SIZE := 14
+## Sons que tocam em loop (vale também para os arquivos carregados).
+const LOOPING := ["pour", "ambience", "music", "music_menu"]
+const MUSIC_FADE := 1.5
 
 ## nome -> [bus, gerador]
 const SOUNDS := {
@@ -27,6 +31,7 @@ const SOUNDS := {
 	"voice_e": ["Voice", "_gen_voice_e"],
 	"ambience": ["Ambience", "_gen_ambience"],
 	"music": ["Music", "_gen_music"],
+	"music_menu": ["Music", "_gen_music"],
 	"ui_click": ["SFX", "_gen_ui_click"],
 }
 
@@ -34,6 +39,8 @@ var _streams: Dictionary = {}
 var _pool_3d: Array[AudioStreamPlayer3D] = []
 var _pool_2d: Array[AudioStreamPlayer] = []
 var _loops: Dictionary = {}
+var _music: AudioStreamPlayer
+var _music_name := ""
 var _rng := RandomNumberGenerator.new()
 
 
@@ -120,6 +127,25 @@ func stop_loop(sound_name: String) -> void:
 		_loops.erase(sound_name)
 
 
+## Troca a música de fundo com crossfade; pedir a que já toca não reinicia.
+func play_music(sound_name: String, volume_db := 0.0) -> void:
+	if sound_name == _music_name or not _streams.has(sound_name):
+		return
+	_music_name = sound_name
+	if _music != null:
+		var old := _music
+		var tw_out := old.create_tween()
+		tw_out.tween_property(old, "volume_db", -60.0, MUSIC_FADE)
+		tw_out.tween_callback(old.queue_free)
+	_music = AudioStreamPlayer.new()
+	_music.stream = _streams[sound_name]
+	_music.bus = "Music"
+	_music.volume_db = -60.0
+	add_child(_music)
+	_music.play()
+	_music.create_tween().tween_property(_music, "volume_db", volume_db, MUSIC_FADE)
+
+
 ## Loop posicional controlado pelo chamador (ex.: som de servir enquanto segura E).
 func make_loop_player_3d(sound_name: String, parent: Node3D) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()
@@ -147,13 +173,6 @@ func _setup_buses() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), -10.0)
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Ambience"), -8.0)
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Voice"), -3.0)
-	# Rádio de boteco: corta graves/agudos da música.
-	var music_idx := AudioServer.get_bus_index("Music")
-	if AudioServer.get_bus_effect_count(music_idx) == 0:
-		var band := AudioEffectBandPassFilter.new()
-		band.cutoff_hz = 1400.0
-		band.resonance = 0.4
-		AudioServer.add_bus_effect(music_idx, band)
 	var master := AudioServer.get_bus_index("Master")
 	if AudioServer.get_bus_effect_count(master) == 0:
 		AudioServer.add_bus_effect(master, AudioEffectLimiter.new())
@@ -163,7 +182,10 @@ func _load_or_generate(sound_name: String) -> AudioStream:
 	for ext in [".ogg", ".wav", ".mp3"]:
 		var path := AUDIO_DIR.path_join(sound_name + ext)
 		if ResourceLoader.exists(path):
-			return load(path)
+			var stream: AudioStream = load(path)
+			if sound_name in LOOPING and "loop" in stream:
+				stream.loop = true
+			return stream
 	return call(SOUNDS[sound_name][1])
 
 

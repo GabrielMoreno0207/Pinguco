@@ -89,7 +89,7 @@ func _ready() -> void:
 	shift.tick.connect(func(_s: float, _c: String) -> void: bar.set_clock(lerpf(18.0, 26.0, shift.progress())))
 
 	AudioManager.start_loop("ambience")
-	AudioManager.start_loop("music")
+	GameManager.state_changed.connect(func(_s: GameManager.State) -> void: _update_music())
 
 	if args.has("--autotest"):
 		var t: Node = load("res://scripts/tests/auto_test.gd").new()
@@ -108,6 +108,14 @@ func _ready() -> void:
 		AudioManager.play("correct")
 	else:
 		GameManager.set_state(GameManager.State.MENU)
+	_update_music()
+
+
+## Phonk no menu; no resto (turno, pausa, bar fechado) toca o "rádio" do boteco.
+## "Jogar de novo" passa pelo MENU só para recarregar a cena, então não troca a faixa.
+func _update_music() -> void:
+	var in_menu := GameManager.state == GameManager.State.MENU and not GameManager.get_meta("skip_menu", false)
+	AudioManager.play_music("music_menu" if in_menu else "music")
 
 
 func _start_shift() -> void:
