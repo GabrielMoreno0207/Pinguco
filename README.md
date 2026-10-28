@@ -75,7 +75,7 @@ Também dá para entrar direto pelo menu, em **ARRUMAR O BAR**.
   - **Reformas**: mudam o visual do bar, e cada nível rende +R$ 1 de gorjeta por pedido.
     Pintura nova (some a parede descascada), piso novo, iluminação (varal de lâmpadas, depois
     neon nas paredes), TV de tela grande (troca a TV de tubo e põe uma segunda TV), decoração
-    (plantas e quadros, depois jukebox) e mobília nova (banquetas estofadas, toalha e vela
+    (plantas e quadros, depois a jukebox, que passa a tocar phonk no lugar do rádio) e mobília nova (banquetas estofadas, toalha e vela
     nas mesas).
   - **Mudar de ponto**: depois de um tempo o Pinguço pode abrir um bar totalmente novo
     (veja abaixo).
@@ -232,8 +232,9 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
 - **Áudio**: arquitetura de buses (Music, SFX, Voice, Ambience) e registro por nome. Se
   existir `assets/audio/<nome>.ogg|.wav|.mp3`, ele é usado. Já vêm gravados: servir
   (`pour`), caixa registradora (`coin`), sininho da porta (`doorbell`), vidro quebrando
-  (`glass_break`), a música do expediente (`music`, "Noite de Barzinho") e a do menu
-  (`music_menu`, phonk) — trocadas com crossfade (créditos em `assets/audio/CREDITS.txt`).
+  (`glass_break`), a música do expediente (`music`, "Noite de Barzinho"), que é a
+  faixa padrão em qualquer tela, e o phonk (`music_menu`), que só toca quando a jukebox está
+  instalada — trocadas com crossfade (créditos em `assets/audio/CREDITS.txt`).
   O resto é sintetizado: tilintar de copo, garrafa, acerto, erro, atraso, passos, vozes
   cartunescas em "sílabas" (tom por perfil, arrastadas quando bêbados), risadas, resmungos,
   ronco e burburinho de bar.

@@ -382,6 +382,17 @@ func _run() -> void:
 	w.free()
 	r.free()
 
+	# a jukebox troca o rádio do boteco pelo phonk; sem ela a faixa padrão vale em qualquer tela
+	main.bar.has_jukebox = false
+	main._update_music()
+	check(AudioManager.music_name() == "music", "sem jukebox toca o rádio do boteco")
+	main.bar.has_jukebox = true
+	main._update_music()
+	check(AudioManager.music_name() == "music_menu", "com jukebox toca o phonk")
+	main.bar.has_jukebox = false
+	main._update_music()
+	check(AudioManager.music_name() == "music", "tirar a jukebox devolve o rádio")
+
 	# monta cada ponto, sem e com todas as reformas, e confere que o bar fica jogável
 	main.bar.visible = false
 	# só um WorldEnvironment vale por vez: tira o do bar principal enquanto testa os outros
@@ -401,6 +412,8 @@ func _run() -> void:
 			var ok := b.dispensers.size() == BeverageDatabase.drinks().size() and b.seats.size() == BarProgress.seat_count() \
 				and b.cash_register != null and b.prep_stations.size() == 3
 			check(ok, "%s %s: monta com %d banquetas e todas as garrafas" % [loc_id, "reformado" if full else "original", b.seats.size()])
+			check(b.has_jukebox == full, "%s %s: jukebox %s" % [loc_id, "reformado" if full else "original",
+				"instalada" if full else "ainda não"])
 			if shots:
 				player.global_position = Vector3(0, 0.05, -1.0)
 				_aim_at(player, Vector3(0, 1.4, 4.5))

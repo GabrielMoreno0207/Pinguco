@@ -111,11 +111,11 @@ func _ready() -> void:
 	_update_music()
 
 
-## Phonk no menu; no resto (turno, pausa, bar fechado) toca o "rádio" do boteco.
-## "Jogar de novo" passa pelo MENU só para recarregar a cena, então não troca a faixa.
+## A jukebox é a fonte do phonk: instalada (nível 2 da decoração), ela toma conta do som
+## do bar. Sem ela toca o "rádio" do boteco, que é a faixa padrão em qualquer tela.
 func _update_music() -> void:
-	var in_menu := GameManager.state == GameManager.State.MENU and not GameManager.get_meta("skip_menu", false)
-	AudioManager.play_music("music_menu" if in_menu else "music")
+	var jukebox := bar != null and bar.has_jukebox
+	AudioManager.play_music("music_menu" if jukebox else "music")
 
 
 func _start_shift() -> void:

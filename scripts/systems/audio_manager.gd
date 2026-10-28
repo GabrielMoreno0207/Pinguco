@@ -146,6 +146,11 @@ func play_music(sound_name: String, volume_db := 0.0) -> void:
 	_music.create_tween().tween_property(_music, "volume_db", volume_db, MUSIC_FADE)
 
 
+## Faixa tocando agora ("" se nenhuma).
+func music_name() -> String:
+	return _music_name
+
+
 ## Loop posicional controlado pelo chamador (ex.: som de servir enquanto segura E).
 func make_loop_player_3d(sound_name: String, parent: Node3D) -> AudioStreamPlayer3D:
 	var p := AudioStreamPlayer3D.new()

@@ -30,6 +30,8 @@ var door_outside := Vector3(3.0, 0, 8.0)
 var spinners: Array[Node3D] = []
 var clock_hand_h: Node3D
 var clock_hand_m: Node3D
+## A jukebox foi instalada neste bar? Quem toca a música se guia por isto.
+var has_jukebox := false
 
 ## Tema do ponto atual (ver BarLocations.DATA).
 var loc: Dictionary
@@ -1208,6 +1210,7 @@ func _frame(pos: Vector3, yaw: float) -> void:
 
 
 func _jukebox(pos: Vector3) -> void:
+	has_jukebox = true
 	var n := Node3D.new()
 	n.position = pos
 	n.rotation_degrees.y = 180
