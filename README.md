@@ -283,6 +283,10 @@ tools/
   tronco. Confira com `godot --path pinguco -- --gallery`.
 - **Exportar o jogo**: os `.bin` não são recursos do Godot. No preset de exportação, inclua
   `assets/customers/*.bin` em *Filtros para exportar arquivos/pastas não-recurso*.
+- **Mexer no ícone**: edite `tools/make_icon.py` e rode `python tools/make_icon.py` (precisa de
+  `pillow`; `--preview` salva um PNG grande para conferir). Ele gera `assets/icon.png`, usado
+  como ícone da janela, e `assets/icon.ico`, para apontar em *Application > Icon* ao exportar
+  no Windows.
 
 ## Decisões importantes
 
