@@ -233,7 +233,7 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   existir `assets/audio/<nome>.ogg|.wav|.mp3`, ele é usado. Já vêm gravados: servir
   (`pour`), caixa registradora (`coin`), sininho da porta (`doorbell`), vidro quebrando
   (`glass_break`), a música do expediente (`music`, "Noite de Barzinho"), que é a
-  faixa padrão em qualquer tela, e o phonk (`music_menu`), que só toca quando a jukebox está
+  faixa padrão em qualquer tela, e o phonk (`music_jukebox`), que só toca quando a jukebox está
   instalada — trocadas com crossfade (créditos em `assets/audio/CREDITS.txt`).
   O resto é sintetizado: tilintar de copo, garrafa, acerto, erro, atraso, passos, vozes
   cartunescas em "sílabas" (tom por perfil, arrastadas quando bêbados), risadas, resmungos,

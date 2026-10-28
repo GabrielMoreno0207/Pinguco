@@ -9,7 +9,7 @@ const RATE := 22050
 const BUSES := ["Music", "SFX", "Voice", "Ambience"]
 const POOL_SIZE := 14
 ## Sons que tocam em loop (vale também para os arquivos carregados).
-const LOOPING := ["pour", "ambience", "music", "music_menu"]
+const LOOPING := ["pour", "ambience", "music", "music_jukebox"]
 const MUSIC_FADE := 1.5
 
 ## nome -> [bus, gerador]
@@ -31,7 +31,7 @@ const SOUNDS := {
 	"voice_e": ["Voice", "_gen_voice_e"],
 	"ambience": ["Ambience", "_gen_ambience"],
 	"music": ["Music", "_gen_music"],
-	"music_menu": ["Music", "_gen_music"],
+	"music_jukebox": ["Music", "_gen_music"],
 	"ui_click": ["SFX", "_gen_ui_click"],
 }
 

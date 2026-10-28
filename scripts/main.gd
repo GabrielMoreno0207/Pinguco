@@ -115,7 +115,7 @@ func _ready() -> void:
 ## do bar. Sem ela toca o "rádio" do boteco, que é a faixa padrão em qualquer tela.
 func _update_music() -> void:
 	var jukebox := bar != null and bar.has_jukebox
-	AudioManager.play_music("music_menu" if jukebox else "music")
+	AudioManager.play_music("music_jukebox" if jukebox else "music")
 
 
 func _start_shift() -> void:

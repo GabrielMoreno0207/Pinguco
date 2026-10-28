@@ -388,7 +388,7 @@ func _run() -> void:
 	check(AudioManager.music_name() == "music", "sem jukebox toca o rádio do boteco")
 	main.bar.has_jukebox = true
 	main._update_music()
-	check(AudioManager.music_name() == "music_menu", "com jukebox toca o phonk")
+	check(AudioManager.music_name() == "music_jukebox", "com jukebox toca o phonk")
 	main.bar.has_jukebox = false
 	main._update_music()
 	check(AudioManager.music_name() == "music", "tirar a jukebox devolve o rádio")

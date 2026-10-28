@@ -1,12 +1,12 @@
 Áudios do Pinguço (baixados do Pixabay, licença Pixabay Content License).
 Nome no projeto  <- arquivo original
 
-pour.mp3         <- 54789481-cup-of-water-pour-into-glass-cup-water-flows-into-glass-water-490991.mp3
-coin.mp3         <- dragon-studio-register-cha-ching-376896.mp3 (Dragon Studio)
-doorbell.mp3     <- freesound_community-ding-1-106698.mp3 (freesound_community)
-glass_break.mp3  <- freesound_community-glass-broken-43626.mp3 (freesound_community)
-music.mp3        <- lunarboommusic-noite-de-barzinho-579617.mp3 ("Noite de Barzinho", LunarBoomMusic) — música do expediente
-music_menu.mp3   <- sub_clair-brazilian-phonk-571897.mp3 ("Brazilian Phonk", sub_clair) — música do menu
+pour.mp3          <- 54789481-cup-of-water-pour-into-glass-cup-water-flows-into-glass-water-490991.mp3
+coin.mp3          <- dragon-studio-register-cha-ching-376896.mp3 (Dragon Studio)
+doorbell.mp3      <- freesound_community-ding-1-106698.mp3 (freesound_community)
+glass_break.mp3   <- freesound_community-glass-broken-43626.mp3 (freesound_community)
+music.mp3         <- lunarboommusic-noite-de-barzinho-579617.mp3 ("Noite de Barzinho", LunarBoomMusic) — música do expediente
+music_jukebox.mp3 <- sub_clair-brazilian-phonk-571897.mp3 ("Brazilian Phonk", sub_clair) — toca na jukebox
 
 Para trocar/adicionar um som, salve como assets/audio/<nome>.ogg|.wav|.mp3 usando
 um nome da tabela SOUNDS em scripts/systems/audio_manager.gd.
