@@ -26,6 +26,11 @@ func _ready() -> void:
 		GameManager.set_meta("autotest", true)
 		add_child(load("res://scripts/tests/gallery.gd").new())
 		return
+	if args.has("--views"):
+		# vitrine do cenário: fotos de ângulos fixos de cada ponto
+		GameManager.set_meta("autotest", true)
+		add_child(load("res://scripts/tests/scene_shots.gd").new())
+		return
 	world = Node3D.new()
 	world.name = "World"
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE

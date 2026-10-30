@@ -101,12 +101,18 @@ Também dá para entrar direto pelo menu, em **ARRUMAR O BAR**.
 | Choperia do Pinguço | Centro da cidade | dia 5 e 3 reformas | R$ 1.200 | preços x1.5, 5 banquetas, mais movimento |
 | Pinguço Beach Club | Orla da praia | dia 10 e 4 reformas | R$ 3.200 | preços x2.2, 5 banquetas, muito movimento |
 
-Cada ponto é um bar novo. Mudam as paredes, o piso, o teto, o balcão, a geladeira, a vista lá
-de fora (rua do bairro, prédios do centro ou o mar à noite), os móveis do salão (mesa de
-plástico e sinuca, mesas de madeira com barris e alvo de dardos, guarda-sol com
-espreguiçadeiras e pranchas), os cartazes, o letreiro e a decoração. Melhorias, reformas e
-arrumação começam do zero (e custam mais) no ponto novo. A área atrás do balcão mantém o mesmo
-formato, então o jeito de jogar não muda.
+Cada ponto é um bar novo. Mudam as paredes, o piso, o teto, o balcão, a geladeira, os móveis
+do salão (mesa de plástico e sinuca; mesas de madeira com barris e alvo de dardos; guarda-sol
+com espreguiçadeiras e pranchas), os cartazes, o letreiro, a decoração e o mundo lá fora,
+montado em 3D: rua de bairro com calçada, fiação, carro e casas de janela acesa; avenida do
+Centro com torres, faixa de pedestre e ponto de ônibus; ou a praia, com areia, mar ondulando
+até o horizonte, coqueiros e torre de salva-vidas.
+
+**A praia não é um salão, é um quiosque**: telhado de palha sobre pilares, piso de deck,
+guarda-corpo baixo nas laterais e parede só no fundo. O salão vira a areia — as mesas com
+guarda-sol ficam lá fora, de frente para o mar. Mesmo assim a área atrás do balcão continua
+idêntica à dos outros pontos, então o jeito de jogar não muda. Melhorias, reformas e arrumação
+começam do zero (e custam mais) no ponto novo.
 
 Dia, ponto, saldo, gaveta, melhorias e arrumação ficam salvos em `user://bar_progress.json`. O botão
 "zerar progresso" do menu apaga tudo. Os modos de teste não leem nem gravam esse arquivo.
@@ -128,9 +134,15 @@ godot --path . -- --bench
 # vitrine: garrafas, mãos, fichas, os 6 fregueses (de frente, 3/4, perfil, sentados) e as
 # expressões neutro/feliz/bravo/bêbado de cada um em user://shots/gallery_*
 godot --path . -- --gallery
+
+# vitrine do cenário: cada ponto (original e reformado) de 6 ângulos fixos, para
+# conferir iluminação, materiais e a vista lá de fora em user://shots/view_*
+godot --path . -- --views
+godot --path . -- --views --full --loc=praia   # só o quiosque reformado
 ```
 
-Outras opções: `-- --low` força o modo leve e `-- --high` força o modo completo.
+Outras opções: `-- --low` força o modo leve, `-- --high` força o modo completo e
+`-- --escala=0.85` muda a resolução de renderização do 3D no modo leve (padrão 0,6).
 
 ## O que está implementado
 
@@ -138,8 +150,12 @@ Outras opções: `-- --low` força o modo leve e `-- --high` força o modo compl
   geladeira "GELADA" com porta de vidro, bancada com pia, copos, jarras, liquidificador e
   caixa registradora, estufa de salgados, mesas e cadeiras de plástico, sinuca, engradados,
   TV passando futebol, ventiladores de teto, bandeirinhas, cartazes ("FIADO? SÓ AMANHÃ!"),
-  flâmula, calendário, relógio de parede que acompanha o turno, porta de enrolar e a rua lá
-  fora. Piso de caquinhos vermelhos e azulejos são shaders procedurais.
+  flâmula, calendário, relógio de parede que acompanha o turno, porta de enrolar, espelho
+  com fita de luz atrás das prateleiras e a rua lá fora, montada em 3D. Piso de caquinhos,
+  azulejo, madeira (veio, nós e verniz), fachadas, asfalto, areia e mar são shaders
+  procedurais. A iluminação é por zonas — lâmpadas com cúpula jogando a luz para baixo,
+  calha sobre a bancada, geladeira acesa, letreiro e neon —, cada uma com o seu feixe no ar
+  e a sua poça no chão.
 - **Jogador**: CharacterBody3D com WASD, mouse, gravidade, colisão, balanço de câmera,
   passos, tremida de câmera e mãos em primeira pessoa esculpidas (malha contínua com
   esqueleto em cada falange, unhas, nós dos dedos, antebraço com pelinhos, manga dobrada e
@@ -262,9 +278,12 @@ scripts/
   customers/   CustomerController, CustomerRig, CustomerHitbox, Seat
   ui/          HUDController, MainMenu, OptionsPanel, SpeechBubble, StatusTag, BeverageChip, Crosshair, DrunkMeter,
                StarRow, UiTheme
-  visual/      Mats (toon + contorno, plástico), SymbolShapes, BeverageModels
-  world/       BarBuilder, BarShaders
-  tests/       auto_test.gd, bench.gd, gallery.gd
+  visual/      Mats (toon + contorno, plástico, madeira, vidro), SymbolShapes,
+               BeverageModels, DrinkShaders (vidro, líquido, espuma)
+  world/       BarBuilder (salão fechado e quiosque), BarAtmosphere (céu, hora e
+               pós-processamento), OutsideBuilder (rua, Centro, praia),
+               LightFX (feixes e poças de luz), BarShaders
+  tests/       auto_test.gd, bench.gd, gallery.gd, scene_shots.gd
 tools/
   sdf_sculpt.py                 escultura por SDF -> malha (marching cubes, decimação,
                                 regiões de material recortadas, pesos de esqueleto)
@@ -323,18 +342,78 @@ tools/
   pode fazer o freguês ir embora bravo.
 - **Com 12 cores, a cor sozinha fica ambígua**. Por isso, quando um pedido "Chumbado" mostra
   só 1 pista, ela é sempre letra ou símbolo, nunca só a cor.
-- **Renderer de compatibilidade (OpenGL 3.3)**. A máquina de desenvolvimento tem uma
-  GeForce 210, sem Vulkan e sem D3D12. No renderer de compatibilidade, o jogo ativa um
-  **modo leve** automaticamente:
-  - uma luz direcional no lugar das 9 luzes pontuais;
-  - Environment mínimo (sem glow, fog ou ajustes, que custavam metade do frame);
-  - 3D a 60% da resolução, com o HUD nítido;
-  - shading por vértice e piso pré-renderizado em textura.
+- **Cartoon chapado, não realista**. O estilo é desenho animado: cor sólida, contorno e
+  silhueta. Por isso os materiais são **foscos de propósito** — `SPECULAR_DISABLED` no
+  toon, especular baixo nos shaders, nenhum mapa de normal e glow só no que é luz de
+  verdade (lâmpada, neon, letreiro), com limiar alto. Reflexo e relevo puxam a cena para o
+  realista e deixam tudo "brilhoso"; o que dá forma aqui é a **luz**, não o brilho.
+  Quem quiser mexer: `Mats.toon()`, `BarShaders.WALL/WOOD/FLOOR`, `DrinkShaders.GLASS` e
+  o bloco de pós-processamento em `BarAtmosphere.setup()`.
+
+- **Borda lisa**: MSAA 4× no Forward+, que resolve o serrilhado de vez. No modo leve não
+  há antisserrilhado possível — o renderer de compatibilidade não tem FXAA e MSAA ali é
+  caro demais —, então o único botão é a resolução de renderização do 3D. Ela está em 60%,
+  que é o que a GT 210 aguenta; em placa melhor suba com `-- --escala=0.85` (a conta é
+  quadrática: 0,85 custa o dobro de 0,6).
+
+- **Forward+ por padrão, com queda limpa para OpenGL**. O jogo pede `forward_plus` no
+  `project.godot`. Em GPU sem Vulkan/D3D12 (a máquina de desenvolvimento tem uma GeForce
+  210, de 2009) o Godot cai sozinho para `gl_compatibility`, e aí o jogo liga o **modo
+  leve**. Geometria, shaders e materiais são os mesmos; o que muda é a iluminação:
+
+  | | Forward+ | modo leve (OpenGL) |
+  |---|---|---|
+  | luzes | todas as pontuais, com sombra nas principais | **uma** direcional (ver abaixo) |
+  | oclusão de contato | SSAO suave | — |
+  | ar do bar | nevoeiro volumétrico + poças de luz | poças de luz |
+  | feixe de luz no ar | sim | não (cone aditivo cobre muita tela) |
+  | glow | só no que é luz, limiar alto | desligado |
+  | correção de cor | sim | desligada |
+  | resolução 3D | cheia, MSAA 4× | 60%, sem antisserrilhado |
+
+  **Por que uma luz só.** No renderer de compatibilidade cada luz a mais faz o cenário ser
+  redesenhado. Então lá existe o sol do `BarAtmosphere` e mais nada: dentro do salão
+  fechado ele vira luz quente vinda de cima, fazendo o papel das lâmpadas, e o
+  preenchimento vira luz de ambiente, que é de graça. A forma da luz — a poça clara
+  debaixo de cada lâmpada, no chão e no teto — vem do `LightFX`, que são malhas aditivas
+  sem sombreamento.
+
+  O sombreado voltou a ser **por pixel** mesmo no modo leve: por vértice, numa caixa de 8
+  vértices, não sobra variação nenhuma — era o que mais achatava o cenário.
 
   Além disso, toda a geometria estática é **mesclada por material** (≈1000 → ≈230 draw
-  calls) e a tesselação se adapta ao tamanho. Resultado: de 3 para ~28 FPS na GT 210. Em
-  GPUs modernas, troque o renderer para Forward+ no `project.godot` para ter luzes
-  pontuais, sombras, glow e fog.
+  calls), cada shader é compilado uma vez só (`BarShaders.shader_for`), materiais iguais
+  são compartilhados (`BarShaders.shared`) e a tesselação se adapta ao tamanho da peça.
+
+- **O relógio do turno comanda o céu**. O turno vai das 18h às 2h e `BarAtmosphere.set_hour()`
+  leva o céu do fim de tarde até a noite fechada: o sol poente baixa e esfria virando lua, o
+  nevoeiro troca de cor e a luz que entra de fora acompanha. Custa zero por frame (são só
+  propriedades do `Environment` e de duas luzes direcionais) e dá a passagem do tempo sem
+  nenhum sistema novo.
+
+- **A praia é um quiosque, não um salão**. Os outros dois pontos são salões fechados; a
+  praia tem `open: true` e uma planta menor em `BarLocations`, e o `BarBuilder` monta
+  telhado de palha sobre pilares, guarda-corpo baixo nas laterais e parede só no fundo.
+  O salão vira a areia: as mesas saem de baixo da cobertura e o mar fica à vista. A área de
+  trabalho atrás do balcão continua idêntica à dos outros pontos, então a jogabilidade e os
+  testes não mudam.
+
+- **O lado de fora é geometria, não um quadro pintado**. Antes a vista era um *quad* com
+  um shader. Agora o `OutsideBuilder` monta rua, calçada, asfalto, fiação, carro e casas
+  (bairro), avenida com torres, faixa de pedestre e ponto de ônibus (Centro), ou areia,
+  mar com ondas no vertex, coqueiros e torre de salva-vidas (praia). O nevoeiro come o que
+  está longe, então o custo fica no que se vê.
+
+- **Vidro desenha só a face da frente**. O vidro antes era um material transparente com as
+  duas faces desenhadas, o que fazia a garrafa aparecer por dentro de si mesma e o líquido
+  brigar com o copo na ordenação. `DrinkShaders.GLASS` desenha só a frente e tem Fresnel na
+  borda mais um brilho fixo de "estúdio" — é esse brilho que o olho lê como vidro mesmo
+  num bar sem reflexo de ambiente. O líquido tem shader próprio, com a cor concentrando no
+  fundo e bolhas subindo nas bebidas com gás.
+
+- **Rótulo chapado em garrafa redonda precisa vencer a flecha do arco**. O medalhão e a
+  letra ficavam a 2 mm do eixo e as pontas afundavam dentro do vidro. `_chord_gap()`
+  calcula o afastamento a partir do raio e da largura da peça.
 
 ## Limitações conhecidas
 
@@ -344,9 +423,18 @@ tools/
 - Há um único turno/cenário, sem progressão entre noites nem save.
 - Não há opções de sensibilidade do mouse, volume ou acessibilidade na interface (os
   valores ficam nos `@export` do `PlayerController` e nos buses do `AudioManager`).
-- Na GT 210 o jogo roda a ~24–28 FPS (os bonecos e as garrafas mais detalhados custaram ~2
-  FPS). A física ainda é estável, mas o ideal é uma GPU mais
-  recente.
+- O "espelho" atrás das prateleiras não reflete de verdade: é um vidro escuro que abre a
+  parede do fundo. Refletir mesmo pediria uma sonda de reflexão (Forward+) ou uma segunda
+  câmera.
+- Na GT 210 (modo leve) a iluminação é uma direcional só; o resto é mancha de luz pintada.
+  Medido com `--bench` nessa placa (medição instável, varia de corrida para corrida):
+  antes desta leva de mudanças, 14–15 FPS; hoje, 8–12 — o preço do mundo lá fora e dos
+  shaders de material. Cuidado ao medir: o campo `proc=` do bench **não** é tempo de
+  script. Quando a GPU satura, o driver OpenGL trava a thread principal e o tempo aparece
+  ali; já vi `proc=418ms` num quadro em que o GDScript não fazia nada. Numa GPU com Vulkan o jogo
+  roda em Forward+, com todas as luzes, sombras e resolução cheia.
+- No modo leve não dá para tirar o serrilhado a não ser subindo `--escala`, e aí a GT 210
+  não dá conta. Em Forward+ o MSAA 4× resolve.
 
 ## Próximas melhorias prioritárias
 
@@ -358,8 +446,8 @@ tools/
    Turista), bebidas misturadas (receitas com 2 garrafas) e salgados que precisam ser
    fritos.
 5. Eventos de caos: jogo na TV (todo mundo pede ao mesmo tempo), queda de energia, fiscal.
-6. Visual: texturas pintadas à mão, partículas (espuma, respingos) e luz baked para GPUs
-   fracas.
+6. Visual: partículas (fumaça de cigarro, respingos ao servir, poeira nos feixes de luz),
+   sonda de reflexão no Forward+ para o espelho do fundo e luz baked para o modo leve.
 
 ## Créditos
 

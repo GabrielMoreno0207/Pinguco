@@ -4,16 +4,31 @@ extends Node3D
 ## decoração, luzes e os pontos interativos. Tudo procedural (sem assets externos).
 ## O visual vem do ponto atual (BarLocations) e das reformas compradas (BarProgress);
 ## a área de trabalho atrás do balcão é igual em todos os pontos.
+##
+## Pontos fechados (boteco, choperia) ganham paredes e teto; pontos abertos (o quiosque
+## da praia, `loc.open`) ganham telhado de palha sobre pilares e guarda-corpo baixo, e o
+## salão deles é a areia lá fora. Céu e pós-processamento ficam no BarAtmosphere, o mundo
+## de fora no OutsideBuilder.
 
 const WORLD_LAYER := 1
 ## Paredes invisíveis que só bloqueiam o jogador (o raycast de interação as ignora).
 const PLAYER_BLOCK_LAYER := 16
 
+## Planta do salão fechado (boteco e choperia). Pontos abertos, como o quiosque da
+## praia, trazem a sua em `loc.room` e o salão fica menor.
 const ROOM_MIN := Vector3(-6.0, 0.0, -2.6)
 const ROOM_MAX := Vector3(6.0, 3.2, 6.2)
 const COUNTER_TOP := 1.05
 const BACK_TOP := 0.95
 const PREP_XS := [-1.6, 0.0, 1.6]
+
+## Limites do salão deste ponto (ver ROOM_MIN/ROOM_MAX e `loc.room`).
+var room_min := ROOM_MIN
+var room_max := ROOM_MAX
+## Ponto aberto (quiosque): sem paredes na frente nem nas laterais.
+var open_air := false
+## Céu, pós-processamento e a luz que vem de fora.
+var atmosphere: BarAtmosphere
 
 var seats: Array[Seat] = []
 var dispensers: Dictionary = {} # bev id -> BottleDispenser
@@ -44,14 +59,23 @@ var _table_tops: Array[Vector3] = []
 
 func build() -> void:
 	loc = BarProgress.loc()
+	open_air = bool(loc.get("open", false))
+	var planta: Dictionary = loc.get("room", {})
+	room_min = planta.get("min", ROOM_MIN)
+	room_max = planta.get("max", ROOM_MAX)
 	_wood = loc.wood
 	_wood_dark = loc.wood_dark
+	if open_air:
+		# o quiosque não tem porta: o freguês entra pela areia
+		door_inside = Vector3(2.4, 0, room_max.z + 0.7)
+		door_outside = Vector3(2.4, 0, room_max.z + 5.0)
 	var painted := BarProgress.level(&"pintura") > 0
 	var wall: Dictionary = (loc.wall_new if painted else loc.wall).duplicate()
 	wall["grime"] = 0.0 if painted else 0.6
 	_wall_mat = BarShaders.material(BarShaders.WALL, wall)
 	_build_environment()
 	_build_room()
+	_build_outside()
 	_build_main_counter()
 	_build_back_area()
 	_build_fridge()
@@ -68,30 +92,10 @@ func build() -> void:
 # =================================================================== ambiente
 
 func _build_environment() -> void:
-	var we := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.05, 0.04, 0.08)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = loc.ambient
-	env.ambient_light_energy = 0.32
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 0.9
-	env.glow_enabled = true
-	env.glow_intensity = 0.6
-	env.glow_bloom = 0.08
-	env.glow_hdr_threshold = 1.1
-	env.ssao_enabled = true
-	env.ssao_radius = 0.8
-	env.ssao_intensity = 1.6
-	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.18
-	env.adjustment_contrast = 1.05
-	env.fog_enabled = true
-	env.fog_light_color = loc.fog
-	env.fog_density = 0.012
-	we.environment = env
-	add_child(we)
+	atmosphere = BarAtmosphere.new()
+	atmosphere.name = "Atmosphere"
+	add_child(atmosphere)
+	atmosphere.setup(loc, GameManager.low_end)
 
 
 # =================================================================== arquitetura
@@ -110,6 +114,15 @@ func _solid(size: Vector3, pos: Vector3, layer := WORLD_LAYER) -> StaticBody3D:
 	return body
 
 
+## Peça de madeira com veio (tampos, prateleiras, vigas, portas de armário).
+func _plank(parent: Node3D, size: Vector3, pos: Vector3, varnish := 0.7, plank_w := 0.3,
+		along_z := false, dark := false, outline := true) -> MeshInstance3D:
+	var mi := Mats.box(parent, size, pos, _wood_dark if dark else _wood, false)
+	var base: Color = _wood_dark if dark else _wood
+	mi.material_override = Mats.wood(base.lightened(0.12), base.darkened(0.3), varnish, plank_w, along_z, 0.25, outline)
+	return mi
+
+
 func _wall(size: Vector3, pos: Vector3) -> void:
 	var body := _solid(size, pos)
 	var mi := MeshInstance3D.new()
@@ -121,60 +134,115 @@ func _wall(size: Vector3, pos: Vector3) -> void:
 
 
 func _build_room() -> void:
-	var size := ROOM_MAX - ROOM_MIN
-	var center := (ROOM_MAX + ROOM_MIN) / 2.0
-	# piso de caquinhos
-	var floor_body := _solid(Vector3(size.x, 0.2, size.z + 3.0), Vector3(center.x, -0.1, center.z + 1.5))
+	var size := room_max - room_min
+	var center := (room_max + room_min) / 2.0
+	_build_floor(size, center)
+	if open_air:
+		_build_thatch_roof(size, center)
+	else:
+		_build_ceiling(size, center)
+		_build_walls(size, center)
+	# divisórias atrás do balcão (limitam a área do jogador em qualquer ponto)
+	var t := 0.2
+	_wall(Vector3(t, size.y, 2.95), Vector3(-3.95 - t / 2.0, size.y / 2.0, -1.125))
+	_wall(Vector3(t, size.y, 2.95), Vector3(3.95 + t / 2.0, size.y / 2.0, -1.125))
+
+
+func _build_floor(size: Vector3, center: Vector3) -> void:
+	# o corpo de colisão passa do piso visível: segura o freguês que vem da rua
+	var floor_body := _solid(Vector3(size.x + 4.0, 0.2, size.z + 6.0), Vector3(center.x, -0.1, center.z + 2.0))
 	var floor_mesh := MeshInstance3D.new()
 	var fm := BoxMesh.new()
 	fm.size = Vector3(size.x, 0.2, size.z)
 	floor_mesh.mesh = fm
-	floor_mesh.position.z = -1.5
+	floor_mesh.position = Vector3(0, 0, center.z - (center.z + 2.0))
 	floor_mesh.material_override = _floor_material()
 	floor_body.add_child(floor_mesh)
-	# teto com vigas
-	Mats.box(self, Vector3(size.x, 0.1, size.z), Vector3(center.x, ROOM_MAX.y + 0.05, center.z), loc.ceiling, false)
-	for i in 7:
-		Mats.box(self, Vector3(size.x, 0.14, 0.14), Vector3(center.x, ROOM_MAX.y - 0.07, ROOM_MIN.z + 0.6 + i * 1.3), _wood_dark, false)
-	# paredes
+	# rodapé de madeira onde o piso encosta na parede (tira o corte seco piso/parede)
+	if not open_air:
+		var h := 0.12
+		Mats.box(self, Vector3(size.x, h, 0.04), Vector3(center.x, h / 2.0, room_min.z + 0.02), _wood_dark, false)
+		for sx: float in [room_min.x + 0.02, room_max.x - 0.02]:
+			Mats.box(self, Vector3(0.04, h, size.z), Vector3(sx, h / 2.0, center.z), _wood_dark, false)
+
+
+func _build_ceiling(size: Vector3, center: Vector3) -> void:
+	# forro de madeirite: a cor chapada era o que mais entregava "sem textura" lá em cima
+	var forro := Mats.box(self, Vector3(size.x, 0.1, size.z), Vector3(center.x, room_max.y + 0.05, center.z), loc.ceiling, false)
+	forro.material_override = Mats.wood(Color(loc.ceiling).lightened(0.08), Color(loc.ceiling).darkened(0.34),
+		0.1, 0.42, true, 0.5, false)
+	var beams := int(size.z / 1.3)
+	for i in beams:
+		_plank(self, Vector3(size.x, 0.14, 0.14), Vector3(center.x, room_max.y - 0.07, room_min.z + 0.6 + i * 1.3), 0.2, 0.9, false, true, false)
+
+
+func _build_walls(size: Vector3, center: Vector3) -> void:
 	var t := 0.2
-	_wall(Vector3(size.x, size.y, t), Vector3(center.x, size.y / 2.0, ROOM_MIN.z - t / 2.0)) # fundo
-	_wall(Vector3(t, size.y, size.z), Vector3(ROOM_MIN.x - t / 2.0, size.y / 2.0, center.z)) # esquerda
-	_wall(Vector3(t, size.y, size.z), Vector3(ROOM_MAX.x + t / 2.0, size.y / 2.0, center.z)) # direita
+	_wall(Vector3(size.x, size.y, t), Vector3(center.x, size.y / 2.0, room_min.z - t / 2.0)) # fundo
+	_wall(Vector3(t, size.y, size.z), Vector3(room_min.x - t / 2.0, size.y / 2.0, center.z)) # esquerda
+	_wall(Vector3(t, size.y, size.z), Vector3(room_max.x + t / 2.0, size.y / 2.0, center.z)) # direita
 	# parede da frente com vão da porta de enrolar (x 2.2..3.8, até 2.4 m)
-	var fz := ROOM_MAX.z + t / 2.0
+	var fz := room_max.z + t / 2.0
 	_wall(Vector3(8.2, size.y, t), Vector3(-1.9, size.y / 2.0, fz))
 	_wall(Vector3(2.2, size.y, t), Vector3(4.9, size.y / 2.0, fz))
 	_wall(Vector3(1.6, 0.8, t), Vector3(3.0, 2.8, fz))
-	# divisórias atrás do balcão (limitam a área do jogador)
-	_wall(Vector3(t, size.y, 2.95), Vector3(-3.95 - t / 2.0, size.y / 2.0, -1.125))
-	_wall(Vector3(t, size.y, 2.95), Vector3(3.95 + t / 2.0, size.y / 2.0, -1.125))
-	# a rua lá fora
-	var street := MeshInstance3D.new()
-	var q := QuadMesh.new()
-	q.size = Vector2(14, 6)
-	street.mesh = q
-	street.position = Vector3(3.0, 2.0, 10.5)
-	street.rotation_degrees.y = 180
-	street.material_override = BarShaders.material(BarShaders.STREET, {"scene": loc.outside})
-	add_child(street)
-	Mats.box(self, Vector3(6, 0.1, 4), Vector3(3.0, -0.04, 8.4), loc.sidewalk, false)
-	_build_door()
+	_build_shutter()
 
 
-## Piso do ponto; o "piso novo" troca o desenho e tira o encardido.
-func _floor_material() -> Material:
-	var renewed := BarProgress.level(&"piso") > 0
-	var fl: Dictionary = loc.floor_new if renewed else loc.floor
-	if int(fl.pattern) == 0:
-		return BarShaders.floor_texture_material() if GameManager.low_end else BarShaders.material(BarShaders.FLOOR)
-	return BarShaders.material(BarShaders.FLOOR_ALT, {
-		"pattern": fl.pattern, "col_a": fl.a, "col_b": fl.b, "grime": 0.0 if renewed else 0.5})
+## Quiosque: parede só no fundo (onde ficam as prateleiras e a geladeira), pilares de
+## madeira e telhado de palha com caimento. A frente e as laterais do salão ficam abertas
+## para a areia e o mar.
+func _build_thatch_roof(size: Vector3, center: Vector3) -> void:
+	var t := 0.2
+	_wall(Vector3(size.x, size.y, t), Vector3(center.x, size.y / 2.0, room_min.z - t / 2.0)) # fundo
+	var eave := 0.7 # avanço do telhado além dos pilares
+	var x0 := room_min.x
+	var x1 := room_max.x
+	var z1 := room_max.z
+	# pilares de madeira roliça
+	for px: float in [x0 + 0.1, 0.0, x1 - 0.1]:
+		for pz: float in [z1 - 0.1, room_min.z + 0.9]:
+			if absf(px) < 0.5:
+				continue # pilar no meio taparia a visão do salão (e a área de trabalho)
+			Mats.cylinder(self, 0.09, size.y, Vector3(px, size.y / 2.0, pz), _wood_dark, true, 0.08)
+			_solid(Vector3(0.24, size.y, 0.24), Vector3(px, size.y / 2.0, pz), PLAYER_BLOCK_LAYER)
+	# vigas: duas longarinas e os caibros atravessados
+	for pz: float in [z1 - 0.1, room_min.z + 0.9]:
+		Mats.box(self, Vector3(size.x + eave * 2.0, 0.14, 0.16), Vector3(center.x, size.y - 0.07, pz), _wood_dark, false)
+	var rafters := int(size.x / 0.8) + 1
+	for i in rafters:
+		var rx := lerpf(x0 - eave + 0.2, x1 + eave - 0.2, float(i) / maxf(rafters - 1, 1))
+		Mats.box(self, Vector3(0.1, 0.1, size.z + eave * 1.6), Vector3(rx, size.y + 0.04, center.z + eave * 0.3), _wood, false)
+	# palha: três águas sobrepostas, a de cima mais curta (dá o volume do quiosque)
+	var palha := Color(0.78, 0.6, 0.3)
+	for i in 3:
+		var w := size.x + eave * 2.0 - i * 0.9
+		var d := size.z + eave * 1.6 - i * 0.8
+		var y := size.y + 0.12 + i * 0.22
+		var layer := Mats.box(self, Vector3(w, 0.16, d), Vector3(center.x, y, center.z + eave * 0.3), palha.darkened(i * 0.06))
+		layer.set_meta("thatch", true)
+	# cumeeira
+	Mats.box(self, Vector3(size.x - 1.2, 0.18, 0.3), Vector3(center.x, size.y + 0.78, center.z + eave * 0.3), palha.darkened(0.22))
+	# franja de palha pendurada na borda da frente
+	for i in int((size.x + eave * 2.0) / 0.22):
+		var fx := x0 - eave + 0.11 + i * 0.22
+		var strand := Mats.box(self, Vector3(0.16, 0.26, 0.05),
+			Vector3(fx, size.y + 0.02, center.z + eave * 0.3 + (size.z + eave * 1.6) / 2.0), palha.lightened(0.08), false)
+		strand.rotation.z = sin(fx * 3.7) * 0.12
+	# guarda-corpo baixo nas laterais do salão: fecha o quiosque sem tapar a vista
+	for sx: float in [x0 + 0.1, x1 - 0.1]:
+		var rail_z0 := 0.45
+		var rail_len := z1 - rail_z0 - 0.2
+		_plank(self, Vector3(0.1, 0.07, rail_len), Vector3(sx, 0.92, rail_z0 + rail_len / 2.0), 0.5, 0.5, true)
+		Mats.box(self, Vector3(0.07, 0.05, rail_len), Vector3(sx, 0.55, rail_z0 + rail_len / 2.0), _wood_dark, false)
+		for i in int(rail_len / 0.4):
+			Mats.cylinder(self, 0.025, 0.9, Vector3(sx, 0.45, rail_z0 + 0.2 + i * 0.4), _wood_dark, false)
 
 
-func _build_door() -> void:
+## Porta de enrolar do salão fechado (fica recolhida: o bar está aberto).
+func _build_shutter() -> void:
 	var d := Node3D.new()
-	d.position = Vector3(3.0, 0, ROOM_MAX.z + 0.1)
+	d.position = Vector3(3.0, 0, room_max.z + 0.1)
 	add_child(d)
 	# batente de metal e a porta de enrolar recolhida lá em cima
 	Mats.box(d, Vector3(0.12, 2.4, 0.3), Vector3(-0.86, 1.2, 0), Color(0.45, 0.48, 0.5))
@@ -183,16 +251,30 @@ func _build_door() -> void:
 	roll.rotation_degrees.z = 90
 	for i in 3:
 		Mats.box(d, Vector3(1.6, 0.06, 0.04), Vector3(0, 2.05 - i * 0.07, 0.12), Color(0.5, 0.52, 0.55), false)
-	# poste de luz lá fora
-	Mats.cylinder(self, 0.06, 4.0, Vector3(5.6, 2.0, 9.2), Color(0.3, 0.3, 0.32))
-	Mats.sphere(self, 0.2, Vector3(5.6, 4.0, 9.2), Color(1.0, 0.85, 0.5), false).material_override = Mats.toon(Color(1.0, 0.85, 0.5), false, 0.5, 3.0)
-	var street_light := OmniLight3D.new()
-	street_light.position = Vector3(5.6, 3.8, 9.0)
-	street_light.light_color = Color(1.0, 0.75, 0.4)
-	street_light.light_energy = 2.0
-	street_light.omni_range = 7.0
-	add_child(street_light)
-	_omni(street_light)
+
+
+## Piso do ponto; o "piso novo" troca o desenho e tira o encardido.
+func _floor_material() -> Material:
+	var renewed := BarProgress.level(&"piso") > 0
+	if open_air:
+		# quiosque é deck de tábuas; sem isso a areia de dentro encostaria na areia de
+		# fora com shaders diferentes e apareceria a emenda
+		return Mats.wood(_wood.lightened(0.1), _wood.darkened(0.32),
+			0.5 if renewed else 0.2, 0.22, false, 0.1 if renewed else 0.5, false)
+	var fl: Dictionary = loc.floor_new if renewed else loc.floor
+	if int(fl.pattern) == 0:
+		return BarShaders.floor_texture_material() if GameManager.low_end else BarShaders.material(BarShaders.FLOOR)
+	return BarShaders.material(BarShaders.FLOOR_ALT, {
+		"pattern": fl.pattern, "col_a": fl.a, "col_b": fl.b, "grime": 0.0 if renewed else 0.5})
+
+
+## O mundo lá fora (rua do bairro, avenida do Centro ou praia), em OutsideBuilder.
+func _build_outside() -> void:
+	var out := OutsideBuilder.new()
+	out.build(self, loc, room_min, room_max, GameManager.low_end)
+	for l in out.lights:
+		if GameManager.low_end:
+			l.queue_free()
 
 
 # =================================================================== balcão principal
@@ -210,10 +292,10 @@ func _build_main_counter() -> void:
 		"tile_a": loc.counter_tile[0], "tile_b": loc.counter_tile[1], "tile_top": 5.0, "tile_size": 0.12})
 	body.add_child(front)
 	# tampo de madeira envernizada com borda
-	Mats.box(self, Vector3(length + 0.1, 0.07, 0.92), Vector3(0, COUNTER_TOP + 0.005, 0.03), _wood)
-	Mats.box(self, Vector3(length + 0.12, 0.05, 0.06), Vector3(0, COUNTER_TOP - 0.02, 0.5), _wood_dark)
+	_plank(self, Vector3(length + 0.1, 0.07, 0.92), Vector3(0, COUNTER_TOP + 0.005, 0.03), 0.9, 0.3)
+	_plank(self, Vector3(length + 0.12, 0.05, 0.06), Vector3(0, COUNTER_TOP - 0.02, 0.5), 0.9, 0.3, false, true)
 	# rodapé de madeira e apoio de pé cromado
-	Mats.box(self, Vector3(length, 0.12, 0.04), Vector3(0, 0.06, 0.36), _wood_dark, false)
+	_plank(self, Vector3(length, 0.12, 0.04), Vector3(0, 0.06, 0.36), 0.4, 0.26, false, true, false)
 	var bar := Mats.cylinder(self, 0.025, length - 0.2, Vector3(0, 0.25, 0.48), Color(0.8, 0.8, 0.85), false)
 	bar.rotation_degrees.z = 90
 	for x in [-3.6, -1.2, 1.2, 3.6]:
@@ -230,6 +312,47 @@ func _build_main_counter() -> void:
 	for x: float in seat_xs():
 		_napkin_holder(Vector3(x + 0.3, COUNTER_TOP + 0.04, 0.3))
 		_peanut_bowl(Vector3(x - 0.3, COUNTER_TOP + 0.04, 0.28))
+	_counter_clutter()
+
+
+## A bagunça que faz o balcão parecer usado: pano torcido, abridor, cinzeiro com guimba
+## e o pote de gorjeta.
+func _counter_clutter() -> void:
+	# pano de prato jogado, dobrado em duas partes
+	var pano := Node3D.new()
+	pano.position = Vector3(-2.55, COUNTER_TOP + 0.05, -0.1)
+	pano.rotation.y = 0.4
+	add_child(pano)
+	Mats.box(pano, Vector3(0.28, 0.02, 0.19), Vector3.ZERO, Color(0.92, 0.9, 0.84))
+	Mats.box(pano, Vector3(0.26, 0.018, 0.1), Vector3(0.02, 0.018, 0.03), Color(0.86, 0.84, 0.78)).rotation.y = 0.25
+	for i in 3:
+		Mats.box(pano, Vector3(0.28, 0.021, 0.015), Vector3(0, 0.001, -0.06 + i * 0.06), Color(0.3, 0.5, 0.75), false)
+	# abridor de garrafa com cordinha
+	var abridor := Mats.box(self, Vector3(0.09, 0.008, 0.028), Vector3(-2.2, COUNTER_TOP + 0.045, -0.12), Color(0.72, 0.73, 0.78))
+	abridor.rotation.y = -0.6
+	# cinzeiro de vidro com guimbas
+	var cinz := Node3D.new()
+	cinz.position = Vector3(-3.8, COUNTER_TOP + 0.04, 0.3)
+	add_child(cinz)
+	var prato := Mats.cylinder(cinz, 0.065, 0.022, Vector3(0, 0.011, 0), Color(0.82, 0.86, 0.88), false, 0.075)
+	prato.material_override = Mats.glass(Color(0.84, 0.88, 0.9), 0.4)
+	Mats.cylinder(cinz, 0.05, 0.012, Vector3(0, 0.026, 0), Color(0.32, 0.3, 0.28), false)
+	for i in 3:
+		var a := i * 2.2
+		var g := Mats.cylinder(cinz, 0.006, 0.05, Vector3(cos(a) * 0.028, 0.034, sin(a) * 0.028), Color(0.95, 0.93, 0.86), false)
+		g.rotation = Vector3(PI / 2.0, a, 0)
+		Mats.cylinder(cinz, 0.0062, 0.016, Vector3(cos(a) * 0.05, 0.034, sin(a) * 0.05), Color(0.72, 0.55, 0.3), false).rotation = Vector3(PI / 2.0, a, 0)
+	# pote de gorjeta com umas notas
+	var pote := Node3D.new()
+	pote.position = Vector3(2.45, COUNTER_TOP + 0.04, -0.3)
+	add_child(pote)
+	var vidro := Mats.cylinder(pote, 0.055, 0.12, Vector3(0, 0.06, 0), Color(0.86, 0.95, 1.0), false, 0.06)
+	vidro.material_override = Mats.glass(Color(0.86, 0.95, 1.0), 0.2)
+	for i in 4:
+		var nota := Mats.box(pote, Vector3(0.07, 0.002, 0.035), Vector3(0, 0.018 + i * 0.008, 0), Color(0.62, 0.78, 0.55), false)
+		nota.rotation = Vector3(0.1 * i, i * 0.9, 0.08 * i)
+	Mats.box(pote, Vector3(0.06, 0.03, 0.002), Vector3(0, 0.085, 0.056), UiTheme.PAPER, false)
+	Mats.label3d(pote, "GORJETA", Vector3(0, 0.085, 0.058), 40, UiTheme.INK, 0).pixel_size = 0.0007
 
 
 func _build_snack_case(pos: Vector3) -> void:
@@ -290,11 +413,11 @@ func _build_back_area() -> void:
 	var fm := BoxMesh.new()
 	fm.size = Vector3(w, BACK_TOP, 0.66)
 	front.mesh = fm
-	front.material_override = Mats.toon(_wood_dark)
+	front.material_override = Mats.wood(_wood_dark.lightened(0.14), _wood_dark.darkened(0.3), 0.45, 0.6, true)
 	body.add_child(front)
 	# portinhas do armário
 	for i in int(w / 0.6):
-		Mats.box(self, Vector3(0.52, 0.7, 0.02), Vector3(x0 + 0.33 + i * 0.6, 0.45, z + 0.335), _wood, false)
+		_plank(self, Vector3(0.52, 0.7, 0.02), Vector3(x0 + 0.33 + i * 0.6, 0.45, z + 0.335), 0.6, 0.26, true, false, false)
 		Mats.sphere(self, 0.018, Vector3(x0 + 0.53 + i * 0.6, 0.6, z + 0.35), Color(0.85, 0.7, 0.3), false)
 	Mats.box(self, Vector3(w + 0.04, 0.05, 0.7), Vector3(cx, BACK_TOP + 0.025, z), Color(0.22, 0.24, 0.26))
 	var top := BACK_TOP + 0.05
@@ -317,16 +440,47 @@ func _build_back_area() -> void:
 	cash_register = CashRegister.create()
 	cash_register.position = Vector3(2.42, top, z - 0.05)
 	add_child(cash_register)
-	# prateleiras na parede do fundo
+	# espelho atrás das prateleiras: um painel de vidro escuro com moldura de madeira.
+	# Não reflete de verdade (sai caro), mas o Fresnel do shader de vidro abre a parede
+	# e dá profundidade ao fundo do bar, que era uma parede chapada.
+	# o painel fica rente à parede e as prateleiras passam na frente dele, como num
+	# bar de verdade — por isso só uma moldura de tiras, e não uma caixa atrás
+	var mirror := MeshInstance3D.new()
+	var mm := BoxMesh.new()
+	mm.size = Vector3(4.78, 1.34, 0.012)
+	mirror.mesh = mm
+	mirror.position = Vector3(-1.2, 1.78, -2.594)
+	mirror.material_override = Mats.glass(loc.ambient.darkened(0.55), 0.82, false, 0.35)
+	mirror.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mirror.set_meta("no_highlight", true)
+	add_child(mirror)
+	for my: float in [1.78 + 0.71, 1.78 - 0.71]:
+		_plank(self, Vector3(5.0, 0.1, 0.04), Vector3(-1.2, my, -2.58), 0.7, 0.3)
+	for mx: float in [-1.2 - 2.45, -1.2 + 2.45]:
+		_plank(self, Vector3(0.1, 1.52, 0.04), Vector3(mx, 1.78, -2.58), 0.7, 0.3, true)
+	# prateleiras na parede do fundo (um pouco à frente do espelho)
 	for i in 2:
 		var y := 1.42 + i * 0.45
-		Mats.box(self, Vector3(4.6, 0.04, 0.26), Vector3(-1.2, y, -2.47), _wood)
+		_plank(self, Vector3(4.6, 0.04, 0.26), Vector3(-1.2, y, -2.45), 0.6, 0.3)
 		for bx in [-3.4, 1.0]:
-			Mats.box(self, Vector3(0.03, 0.12, 0.2), Vector3(bx, y - 0.07, -2.5), _wood_dark, false)
+			Mats.box(self, Vector3(0.03, 0.12, 0.2), Vector3(bx, y - 0.07, -2.48), _wood_dark, false)
+		# fita de luz embaixo de cada prateleira, acendendo as garrafas por trás
+		var strip := Mats.box(self, Vector3(4.5, 0.012, 0.03), Vector3(-1.2, y - 0.03, -2.35),
+			Color(1.0, 0.86, 0.6), false)
+		strip.material_override = Mats.toon(Color(1.0, 0.86, 0.6), false, 0.5, 2.2)
+		strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var sl := OmniLight3D.new()
+		sl.position = Vector3(-1.2, y + 0.16, -2.3)
+		sl.light_color = Color(1.0, 0.82, 0.55)
+		sl.light_energy = 1.3
+		sl.omni_range = 2.4
+		sl.light_volumetric_fog_energy = 0.8
+		add_child(sl)
+		_omni(sl)
 	# lugares das garrafas na prateleira de baixo (os primeiros recebem as bebidas)
 	for i in 8:
 		var px := -2.2 + i * 0.55 if i < 6 else -2.2 - (i - 5) * 0.55
-		_add_slot(self, "prateleira", i, Vector3(px, 1.44, -2.45))
+		_add_slot(self, "prateleira", i, Vector3(px, 1.44, -2.43))
 	# garrafas decorativas na prateleira de cima
 	var deco := [Color(0.5, 0.3, 0.1), Color(0.2, 0.45, 0.2), Color(0.85, 0.85, 0.9), Color(0.6, 0.15, 0.1),
 		Color(0.9, 0.6, 0.1), Color(0.3, 0.2, 0.5)]
@@ -335,9 +489,9 @@ func _build_back_area() -> void:
 		var py := 1.44 if i % 2 == 0 else 1.89
 		if py < 1.5:
 			continue
-		_deco_bottle(Vector3(px + randf_range(-0.05, 0.05), py, -2.48), deco[i % deco.size()])
-	_radio(Vector3(0.6, 1.91, -2.45))
-	_trophy(Vector3(-2.1, 1.91, -2.45))
+		_deco_bottle(Vector3(px + randf_range(-0.05, 0.05), py, -2.46), deco[i % deco.size()])
+	_radio(Vector3(0.6, 1.91, -2.43))
+	_trophy(Vector3(-2.1, 1.91, -2.43))
 
 
 func _add_slot(parent: Node3D, area: String, index: int, pos: Vector3) -> BottleSlot:
@@ -474,6 +628,7 @@ func _build_fridge() -> void:
 	# letreiro no topo
 	var sign := Mats.box(f, Vector3(w, 0.32, 0.06), Vector3(0, h + 0.16, 0.3), red)
 	sign.name = "Sign"
+	sign.material_override = Mats.toon(red, true, 0.5, 0.6)
 	Mats.label3d(f, loc.fridge_label, Vector3(0, h + 0.16, 0.335), 70, UiTheme.PAPER, 10).pixel_size = 0.0022
 	# prateleiras aramadas
 	var shelves := [0.6, 1.02, 1.44]
@@ -489,14 +644,27 @@ func _build_fridge() -> void:
 	door.set_meta("no_highlight", true)
 	f.add_child(door)
 	Mats.box(f, Vector3(0.04, 0.5, 0.05), Vector3(w / 2.0 - 0.1, 1.1, d / 2.0 + 0.03), Color(0.85, 0.85, 0.9), false)
-	# luz interna
+	# luz interna: o tubo branco em cima, a luz dele e o reflexo no vidro da porta.
+	# É o que faz a geladeira de boteco chamar o olho no fundo escuro do bar.
+	var tube := Mats.box(f, Vector3(w - 0.2, 0.03, 0.05), Vector3(0, h - 0.14, 0.12), Color(0.85, 0.95, 1.0), false)
+	tube.material_override = Mats.toon(Color(0.85, 0.95, 1.0), false, 0.5, 3.4)
+	tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var light := OmniLight3D.new()
-	light.position = Vector3(0, 1.6, 0.1)
-	light.light_color = Color(0.75, 0.9, 1.0)
-	light.light_energy = 0.8
-	light.omni_range = 1.4
+	light.position = Vector3(0, h - 0.25, 0.1)
+	light.light_color = Color(0.78, 0.9, 1.0)
+	light.light_energy = 2.4
+	light.omni_range = 2.2
+	light.light_volumetric_fog_energy = 1.2
 	f.add_child(light)
 	_omni(light)
+	# gelo cristalizado no vidro e nas bordas das prateleiras
+	for i in 9:
+		var ang := i * 2.3
+		var frost := Mats.sphere(f, 0.02 + fmod(i * 0.013, 0.015),
+			Vector3(cos(ang) * 0.4, 0.45 + fmod(i * 0.31, 1.3), d / 2.0 - 0.03),
+			Color(0.88, 0.96, 1.0), false, Vector3(1.3, 1.0, 0.25))
+		frost.material_override = Mats.glass(Color(0.9, 0.97, 1.0), 0.35)
+		frost.set_meta("no_highlight", true)
 	# lugares das bebidas geladas: prateleira do meio, depois a de cima
 	for i in 6:
 		var sy: float = shelves[1] if i < 3 else shelves[2]
@@ -540,30 +708,36 @@ func _build_menu_board() -> void:
 # =================================================================== salão
 
 const TABLE_SPOTS := [Vector3(-4.6, 0, 2.3), Vector3(-1.7, 0, 4.7), Vector3(5.0, 0, 2.5), Vector3(5.0, 0, 4.6)]
+## No quiosque o salão é a areia: as mesas saem de baixo do telhado.
+const BEACH_TABLE_SPOTS := [Vector3(-6.6, 0, 5.2), Vector3(6.6, 0, 5.6), Vector3(-3.2, 0, 7.8), Vector3(3.6, 0, 8.4)]
+
+
+func _table_spots() -> Array:
+	return BEACH_TABLE_SPOTS if open_air else TABLE_SPOTS
 
 
 func _build_customer_area() -> void:
+	var spots := _table_spots()
 	match int(loc.outside):
 		1: # choperia: mesas de madeira, barris e alvo de dardos
-			for p: Vector3 in TABLE_SPOTS:
+			for p: Vector3 in spots:
 				_wood_table(p)
 			_kegs(Vector3(-4.6, 0, 4.9), 4)
 			_kegs(Vector3(5.2, 0, -1.6), 3)
 			_kegs(Vector3(-5.3, 0, -0.8), 3)
-		2: # beach club: guarda-sol, espreguiçadeiras e pranchas
+		2: # quiosque de praia: guarda-sol na areia, espreguiçadeiras e pranchas no pilar
 			var umbrellas := [Color(1.0, 0.45, 0.3), Color(0.15, 0.6, 0.7), Color(1.0, 0.8, 0.2), Color(0.95, 0.35, 0.55)]
-			for i in TABLE_SPOTS.size():
-				_parasol_table(TABLE_SPOTS[i], umbrellas[i])
-			_lounge_chair(Vector3(-4.5, 0, 4.2), Color(0.15, 0.6, 0.7))
-			_lounge_chair(Vector3(-4.5, 0, 5.3), Color(1.0, 0.45, 0.3))
-			_surfboards(Vector3(-5.82, 0, 3.4))
-			_cooler(Vector3(5.2, 0, -1.6))
-			_coconuts(Vector3(-5.3, 0, -0.8))
+			for i in spots.size():
+				_parasol_table(spots[i], umbrellas[i])
+			_lounge_chair(Vector3(-9.0, 0, 6.6), Color(0.15, 0.6, 0.7))
+			_lounge_chair(Vector3(-9.0, 0, 7.7), Color(1.0, 0.45, 0.3))
+			_lounge_chair(Vector3(9.2, 0, 7.2), Color(1.0, 0.8, 0.2))
+			_surfboards(Vector3(room_min.x - 0.3, 0, room_max.z - 1.6))
+			_cooler(Vector3(2.3, 0, -1.6))
+			_coconuts(Vector3(-3.5, 0, -0.8))
 		_: # boteco: mesa de plástico, sinuca e engradado
-			_plastic_table(TABLE_SPOTS[0], Color(1.0, 0.82, 0.1))
-			_plastic_table(TABLE_SPOTS[1], Color(0.9, 0.15, 0.15))
-			_plastic_table(TABLE_SPOTS[2], Color(1.0, 0.82, 0.1))
-			_plastic_table(TABLE_SPOTS[3], Color(0.9, 0.15, 0.15))
+			for i in spots.size():
+				_plastic_table(spots[i], Color(1.0, 0.82, 0.1) if i % 2 == 0 else Color(0.9, 0.15, 0.15))
 			_pool_table(Vector3(-4.3, 0, 4.6))
 			_crates(Vector3(5.2, 0, -1.6))
 			_crates(Vector3(-5.3, 0, -0.8))
@@ -601,7 +775,7 @@ func _wood_table(pos: Vector3) -> void:
 	var n := Node3D.new()
 	n.position = pos
 	add_child(n)
-	Mats.box(n, Vector3(0.95, 0.06, 0.95), Vector3(0, 0.76, 0), _wood)
+	_plank(n, Vector3(0.95, 0.06, 0.95), Vector3(0, 0.76, 0), 0.75, 0.16)
 	for sx in [-0.38, 0.38]:
 		for sz in [-0.38, 0.38]:
 			Mats.box(n, Vector3(0.07, 0.74, 0.07), Vector3(sx, 0.37, sz), _wood_dark, false)
@@ -709,7 +883,7 @@ func _pool_table(pos: Vector3) -> void:
 	n.position = pos
 	n.rotation_degrees.y = 90
 	add_child(n)
-	Mats.box(n, Vector3(2.0, 0.12, 1.1), Vector3(0, 0.78, 0), _wood_dark)
+	_plank(n, Vector3(2.0, 0.12, 1.1), Vector3(0, 0.78, 0), 0.85, 0.3)
 	Mats.box(n, Vector3(1.8, 0.02, 0.9), Vector3(0, 0.85, 0), Color(0.1, 0.5, 0.25), false)
 	for sx in [-0.85, 0.85]:
 		for sz in [-0.45, 0.45]:
@@ -740,73 +914,159 @@ func _crates(pos: Vector3) -> void:
 # =================================================================== decoração
 
 func _build_decor() -> void:
-	# letreiro do bar na parede da frente (o jogador vê enquanto atende)
-	var sign := Node3D.new()
-	sign.position = Vector3(-1.2, 2.45, ROOM_MAX.z - 0.03)
-	sign.rotation_degrees.y = 180
-	add_child(sign)
-	Mats.box(sign, Vector3(3.6, 0.9, 0.06), Vector3.ZERO, loc.sign_bg)
-	var title := Mats.label3d(sign, String(loc.name).to_upper(), Vector3(0, 0.07, 0.04), 150, Color(1.0, 0.82, 0.3), 24)
-	title.pixel_size = 0.0028 if String(loc.name).length() <= 15 else 0.0022
-	title.modulate = loc.sign_fg
-	var sub := Mats.label3d(sign, loc.subtitle, Vector3(0, -0.28, 0.04), 60, Color(1.0, 0.45, 0.6), 10)
-	sub.pixel_size = 0.0022
-	sub.modulate = loc.sign_sub
-	var sign_light := OmniLight3D.new()
-	sign_light.position = Vector3(-1.2, 2.4, ROOM_MAX.z - 0.6)
-	sign_light.light_color = Color(1.0, 0.6, 0.4)
-	sign_light.light_energy = 0.8
-	sign_light.omni_range = 2.5
-	add_child(sign_light)
-	_omni(sign_light)
+	# faces internas das paredes deste ponto (o quiosque só tem a do fundo)
+	var wl := room_min.x + 0.03
+	var wr := room_max.x - 0.03
+	var wf := room_max.z - 0.03
+	_build_sign(Vector3(-1.2, room_max.y - 0.7, wf) if not open_air else Vector3(-1.0, room_max.y - 0.52, -2.55))
 
-	# TV no suporte passando o jogo: de tubo no começo, telão depois da reforma
-	if BarProgress.level(&"tv") > 0:
-		_tv(Vector3(5.5, 2.3, 1.4), -115, Vector2(1.5, 0.86), false)
-		_tv(Vector3(-5.5, 2.3, 0.3), 115, Vector2(1.2, 0.7), false)
+	if open_air:
+		_build_kiosk_decor()
 	else:
-		_tv(Vector3(5.5, 2.35, 1.4), -115, Vector2(0.5, 0.38), true)
-	Mats.box(self, Vector3(0.3, 0.06, 0.06), Vector3(5.85, 2.35, 1.4), Color(0.3, 0.3, 0.32))
+		# TV no suporte passando o jogo: de tubo no começo, telão depois da reforma
+		if BarProgress.level(&"tv") > 0:
+			_tv(Vector3(wr - 0.47, 2.3, 1.4), -115, Vector2(1.5, 0.86), false)
+			_tv(Vector3(wl + 0.47, 2.3, 0.3), 115, Vector2(1.2, 0.7), false)
+		else:
+			_tv(Vector3(wr - 0.47, 2.35, 1.4), -115, Vector2(0.5, 0.38), true)
+		Mats.box(self, Vector3(0.3, 0.06, 0.06), Vector3(wr - 0.12, 2.35, 1.4), Color(0.3, 0.3, 0.32))
+		# cartazes (o texto muda conforme o ponto)
+		var posters: Array = loc.posters
+		var spots := [
+			[Vector3(wl, 1.9, 1.6), 90], [Vector3(wl, 1.85, 3.6), 90], [Vector3(wr, 1.9, 3.6), -90],
+			[Vector3(1.3, 1.95, wf), 180], [Vector3(-3.97, 1.95, -1.4), 90],
+		]
+		for i in mini(posters.size(), spots.size()):
+			_poster(spots[i][0], spots[i][1], posters[i][0], posters[i][1], posters[i][2])
+		# ventiladores de teto
+		for p in [Vector3(-2.5, room_max.y, 3.2), Vector3(2.0, room_max.y, 3.6)]:
+			_fan(p)
 
-	# cartazes (o texto muda conforme o ponto)
-	var posters: Array = loc.posters
-	var spots := [
-		[Vector3(-5.97, 1.9, 1.6), 90], [Vector3(-5.97, 1.85, 3.6), 90], [Vector3(5.97, 1.9, 3.6), -90],
-		[Vector3(1.3, 1.95, ROOM_MAX.z - 0.03), 180], [Vector3(-3.97, 1.95, -1.4), 90],
-	]
-	for i in mini(posters.size(), spots.size()):
-		_poster(spots[i][0], spots[i][1], posters[i][0], posters[i][1], posters[i][2])
 	_calendar(Vector3(3.93, 1.75, -1.1), -90)
-	_wall_clock(Vector3(3.93, 2.5, -0.9), -90)
+	_wall_clock(Vector3(3.93, minf(2.5, room_max.y - 0.3), -0.9), -90)
 	_bead_curtain(Vector3(-3.97, 0, -1.0))
 
 	match int(loc.outside):
 		1:
-			_dartboard(Vector3(-5.97, 1.75, 4.9), 90)
+			_dartboard(Vector3(wl, 1.75, 4.9), 90)
 			_chopp_tower(Vector3(-3.35, COUNTER_TOP + 0.04, -0.12))
 			# luminárias pendentes de cobre no lugar das bandeirinhas
 			for x in [-4.5, -1.5, 1.5, 4.5]:
 				for z in [2.4, 4.6]:
 					_pendant(Vector3(x, 2.5, z))
 		2:
-			_pennant_flags([Color(0.15, 0.6, 0.7), Color(1.0, 0.98, 0.9), Color(1.0, 0.8, 0.2), Color(1.0, 0.45, 0.3)])
-			_life_ring(Vector3(5.96, 2.3, 4.9), -90)
-			for p in [Vector3(-5.5, 0, 5.8), Vector3(1.8, 0, 5.9), Vector3(5.5, 0, 5.8)]:
-				_tiki_torch(p)
+			_chopp_tower(Vector3(-3.35, COUNTER_TOP + 0.04, -0.12))
 		_:
-			_pennant(Vector3(-5.96, 2.5, 2.6), 90)
+			_pennant(Vector3(wl, 2.5, 2.6), 90)
 			_halloween_decor()
 
-	# ventiladores de teto
-	for p in [Vector3(-2.5, 3.2, 3.2), Vector3(2.0, 3.2, 3.6)]:
-		_fan(p)
+
+## Letreiro do bar, iluminado por baixo.
+func _build_sign(pos: Vector3) -> void:
+	var sign := Node3D.new()
+	sign.position = pos
+	sign.rotation_degrees.y = 180 if pos.z > 0.0 else 0.0
+	add_child(sign)
+	Mats.box(sign, Vector3(3.6, 0.9, 0.06), Vector3.ZERO, loc.sign_bg)
+	# moldura e as lampadinhas em volta, que é o que faz letreiro de bar
+	Mats.box(sign, Vector3(3.74, 0.1, 0.1), Vector3(0, 0.5, 0.0), loc.sign_bg.lightened(0.25), false)
+	Mats.box(sign, Vector3(3.74, 0.1, 0.1), Vector3(0, -0.5, 0.0), loc.sign_bg.lightened(0.25), false)
+	for i in 11:
+		var bx := lerpf(-1.75, 1.75, float(i) / 10.0)
+		for by: float in [0.52, -0.52]:
+			var dot := Mats.sphere(sign, 0.032, Vector3(bx, by, 0.05), Color(1.0, 0.88, 0.6), false)
+			dot.material_override = Mats.toon(Color(1.0, 0.86, 0.55), false, 0.5, 4.0)
+			dot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var title := Mats.label3d(sign, String(loc.name).to_upper(), Vector3(0, 0.07, 0.04), 150, Color(1.0, 0.82, 0.3), 24)
+	title.pixel_size = 0.0028 if String(loc.name).length() <= 15 else 0.0022
+	title.modulate = loc.sign_fg
+	var sub := Mats.label3d(sign, loc.subtitle, Vector3(0, -0.28, 0.04), 60, Color(1.0, 0.45, 0.6), 10)
+	sub.pixel_size = 0.0022
+	sub.modulate = loc.sign_sub
+	var inward: float = -0.6 if pos.z > 0.0 else 0.6
+	var sign_light := OmniLight3D.new()
+	sign_light.position = pos + Vector3(0, -0.05, inward)
+	sign_light.light_color = Color(1.0, 0.6, 0.4)
+	sign_light.light_energy = 1.6
+	sign_light.omni_range = 3.0
+	add_child(sign_light)
+	_omni(sign_light)
+
+
+## Quiosque: nada vai em parede lateral (não há). A decoração pendura no telhado,
+## encosta na parede do fundo ou fica na areia.
+func _build_kiosk_decor() -> void:
+	var y := room_max.y
+	_pennant_flags([Color(0.15, 0.6, 0.7), Color(1.0, 0.98, 0.9), Color(1.0, 0.8, 0.2), Color(1.0, 0.45, 0.3)])
+	# rede de pesca com estrelas-do-mar e conchas no fundo do quiosque
+	_fish_net(Vector3(2.2, 1.9, -2.55))
+	_life_ring(Vector3(-3.9, 1.9, -1.9), 90)
+	# TV debaixo do telhado, virada para o salão
+	if BarProgress.level(&"tv") > 0:
+		_tv(Vector3(room_max.x - 0.6, y - 0.55, 0.9), -120, Vector2(1.3, 0.75), false)
+	# cartazes de madeira pendurados nos caibros
+	var posters: Array = loc.posters
+	var spots := [
+		[Vector3(room_min.x + 1.1, 1.95, room_max.z - 0.2), 180], [Vector3(room_max.x - 1.1, 1.95, room_max.z - 0.2), 180],
+		[Vector3(-3.97, 1.95, -1.4), 90],
+	]
+	for i in mini(posters.size(), spots.size()):
+		_poster(spots[i][0], spots[i][1], posters[i][0], posters[i][1], posters[i][2])
+	# tochas na beira da areia e remos cruzados no pilar
+	for p in [Vector3(room_min.x - 1.2, 0, room_max.z + 1.4), Vector3(room_max.x + 1.2, 0, room_max.z + 1.4),
+			Vector3(room_min.x - 1.6, 0, room_max.z - 1.6), Vector3(room_max.x + 1.6, 0, room_max.z - 1.6)]:
+		_tiki_torch(p)
+	_oars(Vector3(room_min.x + 0.25, 1.4, room_max.z - 0.3))
+	# ventilador de teto preso no caibro do meio
+	_fan(Vector3(0.0, y + 0.02, 1.6))
+
+
+## Rede de pesca pendurada, com estrela-do-mar e conchas presas nela.
+func _fish_net(pos: Vector3) -> void:
+	var n := Node3D.new()
+	n.position = pos
+	add_child(n)
+	var corda := Color(0.82, 0.76, 0.6)
+	for i in 9:
+		var x := -0.8 + i * 0.2
+		Mats.box(n, Vector3(0.012, 1.1, 0.012), Vector3(x, 0.0, 0.0), corda, false).rotation.z = 0.5
+		Mats.box(n, Vector3(0.012, 1.1, 0.012), Vector3(x, 0.0, 0.0), corda, false).rotation.z = -0.5
+	Mats.merge_children(n)
+	# estrela-do-mar
+	var star := Node3D.new()
+	star.position = Vector3(-0.3, 0.1, 0.03)
+	n.add_child(star)
+	for k in 5:
+		var a := k * TAU / 5.0
+		var arm := Mats.box(star, Vector3(0.05, 0.16, 0.02), Vector3(sin(a) * 0.08, cos(a) * 0.08, 0.0),
+			Color(0.95, 0.55, 0.3), false)
+		arm.rotation.z = -a
+	Mats.sphere(star, 0.055, Vector3(0, 0, 0.005), Color(0.95, 0.55, 0.3), false, Vector3(1, 1, 0.4))
+	Mats.merge_children(star)
+	for c: Array in [[0.35, -0.2], [0.6, 0.15], [-0.65, -0.3]]:
+		Mats.sphere(n, 0.05, Vector3(c[0], c[1], 0.03), Color(0.95, 0.9, 0.82), false, Vector3(1, 1, 0.45))
+
+
+## Dois remos cruzados, de enfeite.
+func _oars(pos: Vector3) -> void:
+	for side: float in [-1.0, 1.0]:
+		var n := Node3D.new()
+		n.position = pos
+		n.rotation.z = side * 0.5
+		add_child(n)
+		Mats.cylinder(n, 0.025, 1.7, Vector3.ZERO, Color(0.86, 0.8, 0.66))
+		Mats.sphere(n, 0.11, Vector3(0, -0.85, 0), Color(0.2, 0.6, 0.7) if side > 0.0 else Color(0.95, 0.5, 0.3),
+			true, Vector3(1.0, 1.8, 0.25))
 
 
 func _pennant_flags(colors: Array) -> void:
 	# bandeirinhas atravessando o teto
-	for line in 4:
+	var x := room_max.x - 0.2
+	var y := room_max.y - 0.35
+	var lines := int((room_max.z - 0.6) / 1.4)
+	for line in lines:
 		var z := 0.8 + line * 1.4
-		_bunting(Vector3(-5.8, 2.85, z), Vector3(5.8, 2.85, z + 0.3), colors)
+		_bunting(Vector3(-x, y, z), Vector3(x, y, z + 0.3), colors)
 
 
 ## Decoração de Halloween do boteco: bandeirinhas laranja/preto/roxo, morcegos, abóboras e teias.
@@ -822,16 +1082,16 @@ func _halloween_decor() -> void:
 	_jack_o_lantern(Vector3(1.9, 0.0, 5.75), 0.17)
 	_jack_o_lantern(Vector3(-5.5, 0.0, 5.7), 0.15)
 	# teias nos cantos do teto
-	var top := ROOM_MAX.y - 0.02
-	_cobweb(Vector3(ROOM_MIN.x + 0.02, top, ROOM_MAX.z - 0.02), Vector3.RIGHT, Vector3.DOWN)
-	_cobweb(Vector3(ROOM_MIN.x + 0.02, top, ROOM_MAX.z - 0.02), Vector3.FORWARD, Vector3.DOWN)
-	_cobweb(Vector3(ROOM_MAX.x - 0.02, top, ROOM_MAX.z - 0.02), Vector3.LEFT, Vector3.DOWN)
-	_cobweb(Vector3(-3.93, top, ROOM_MIN.z + 0.02), Vector3.RIGHT, Vector3.DOWN)
-	_cobweb(Vector3(3.93, top, ROOM_MIN.z + 0.02), Vector3.LEFT, Vector3.DOWN)
+	var top := room_max.y - 0.02
+	_cobweb(Vector3(room_min.x + 0.02, top, room_max.z - 0.02), Vector3.RIGHT, Vector3.DOWN)
+	_cobweb(Vector3(room_min.x + 0.02, top, room_max.z - 0.02), Vector3.FORWARD, Vector3.DOWN)
+	_cobweb(Vector3(room_max.x - 0.02, top, room_max.z - 0.02), Vector3.LEFT, Vector3.DOWN)
+	_cobweb(Vector3(-3.93, top, room_min.z + 0.02), Vector3.RIGHT, Vector3.DOWN)
+	_cobweb(Vector3(3.93, top, room_min.z + 0.02), Vector3.LEFT, Vector3.DOWN)
 
 
 func _bat(pos: Vector3) -> void:
-	Mats.cylinder(self, 0.004, ROOM_MAX.y - pos.y, Vector3(pos.x, (ROOM_MAX.y + pos.y) / 2.0, pos.z), Color(0.1, 0.1, 0.1), false)
+	Mats.cylinder(self, 0.004, room_max.y - pos.y, Vector3(pos.x, (room_max.y + pos.y) / 2.0, pos.z), Color(0.1, 0.1, 0.1), false)
 	var bat := MeshInstance3D.new()
 	# silhueta com y para baixo (flat_polygon_mesh inverte o y)
 	bat.mesh = Mats.flat_polygon_mesh(PackedVector2Array([
@@ -960,7 +1220,7 @@ func _chopp_tower(pos: Vector3) -> void:
 
 
 func _pendant(pos: Vector3) -> void:
-	Mats.cylinder(self, 0.006, ROOM_MAX.y - pos.y, Vector3(pos.x, (ROOM_MAX.y + pos.y) / 2.0, pos.z), Color(0.1, 0.1, 0.1), false)
+	Mats.cylinder(self, 0.006, room_max.y - pos.y, Vector3(pos.x, (room_max.y + pos.y) / 2.0, pos.z), Color(0.1, 0.1, 0.1), false)
 	Mats.cylinder(self, 0.16, 0.18, pos, Color(0.88, 0.52, 0.26), true, 0.05)
 	var bulb := Mats.sphere(self, 0.045, pos - Vector3(0, 0.08, 0), Color(1.0, 0.85, 0.6), false)
 	bulb.material_override = Mats.toon(Color(1.0, 0.85, 0.6), false, 0.5, 5.0)
@@ -1062,6 +1322,8 @@ func _wall_clock(pos: Vector3, yaw: float) -> void:
 
 
 func set_clock(hours: float) -> void:
+	if atmosphere:
+		atmosphere.set_hour(hours)
 	if clock_hand_h:
 		clock_hand_h.rotation.z = -fmod(hours, 12.0) / 12.0 * TAU
 		clock_hand_m.rotation.z = -fmod(hours, 1.0) * TAU
@@ -1117,10 +1379,12 @@ func _build_reforms() -> void:
 	var luz := BarProgress.level(&"luz")
 	if luz >= 1:
 		# varal de lâmpadas atravessando o teto
-		for line in 3:
+		var lx := room_max.x - 0.2
+		var ly := room_max.y - 0.22
+		for line in maxi(int((room_max.z - 0.8) / 1.8), 1):
 			var z := 1.2 + line * 1.8
-			var a := Vector3(-5.8, 2.98, z + 0.4)
-			var b := Vector3(5.8, 2.98, z - 0.4)
+			var a := Vector3(-lx, ly, z + 0.4)
+			var b := Vector3(lx, ly, z - 0.4)
 			_cord(a, b, 0.22, Color(0.12, 0.12, 0.12))
 			for i in 18:
 				var t := (i + 0.5) / 18.0
@@ -1129,7 +1393,7 @@ func _build_reforms() -> void:
 				bulb.material_override = Mats.toon([Color(1.0, 0.8, 0.45), Color(1.0, 0.6, 0.4), Color(1.0, 0.92, 0.7)][i % 3], false, 0.5, 5.0)
 		for x in [-3.0, 3.0]:
 			var l := OmniLight3D.new()
-			l.position = Vector3(x, 2.6, 3.0)
+			l.position = Vector3(x, room_max.y - 0.6, minf(3.0, room_max.z - 0.6))
 			l.light_color = Color(1.0, 0.78, 0.5)
 			l.light_energy = 0.6
 			l.omni_range = 5.0
@@ -1139,13 +1403,17 @@ func _build_reforms() -> void:
 		# neon colorido contornando o salão
 		var pink := Color(1.0, 0.3, 0.7)
 		var cyan := Color(0.3, 0.9, 1.0)
-		var tube_pink := Mats.box(self, Vector3(0.04, 0.04, 6.6), Vector3(-5.95, 3.0, 2.9), pink, false)
+		var nx := room_max.x - 0.05
+		var ny := room_max.y - 0.2
+		var nz := (room_max.z + 0.4) / 2.0
+		var nd := room_max.z - 0.4
+		var tube_pink := Mats.box(self, Vector3(0.04, 0.04, nd), Vector3(-nx, ny, nz), pink, false)
 		tube_pink.material_override = Mats.toon(pink, false, 0.5, 4.0)
-		var tube_cyan := Mats.box(self, Vector3(0.04, 0.04, 6.6), Vector3(5.95, 3.0, 2.9), cyan, false)
+		var tube_cyan := Mats.box(self, Vector3(0.04, 0.04, nd), Vector3(nx, ny, nz), cyan, false)
 		tube_cyan.material_override = Mats.toon(cyan, false, 0.5, 4.0)
-		var tube_front := Mats.box(self, Vector3(7.8, 0.04, 0.04), Vector3(-2.1, 3.0, ROOM_MAX.z - 0.05), pink, false)
+		var tube_front := Mats.box(self, Vector3(nx * 1.6, 0.04, 0.04), Vector3(-nx * 0.18, ny, room_max.z - 0.08), pink, false)
 		tube_front.material_override = Mats.toon(pink, false, 0.5, 4.0)
-		for pair in [[Vector3(-5.5, 2.8, 3.0), pink], [Vector3(5.5, 2.8, 3.0), cyan]]:
+		for pair in [[Vector3(-nx + 0.4, ny - 0.2, nz), pink], [Vector3(nx - 0.4, ny - 0.2, nz), cyan]]:
 			var l := OmniLight3D.new()
 			l.position = pair[0]
 			l.light_color = pair[1]
@@ -1155,16 +1423,22 @@ func _build_reforms() -> void:
 			_omni(l)
 	var deco := BarProgress.level(&"decoracao")
 	if deco >= 1:
-		for p in [Vector3(-5.55, 0, 5.75), Vector3(5.55, 0, 5.75), Vector3(5.55, 0, 0.3)]:
+		var px := room_max.x - 0.45
+		var pz := room_max.z - 0.45
+		for p in [Vector3(-px, 0, pz), Vector3(px, 0, pz), Vector3(px, 0, 0.3)]:
 			_plant(p)
-		for z in [4.7, 5.5]:
-			_frame(Vector3(-5.97, 2.0, z), 90)
-		_frame(Vector3(5.97, 2.0, 5.3), -90)
+		if not open_air:
+			for z in [room_max.z - 1.5, room_max.z - 0.7]:
+				_frame(Vector3(room_min.x + 0.03, 2.0, z), 90)
+			_frame(Vector3(room_max.x - 0.03, 2.0, room_max.z - 0.9), -90)
 	if deco >= 2:
-		_jukebox(Vector3(0.5, 0, ROOM_MAX.z - 0.3))
+		# no quiosque a área de trabalho é apertada: a jukebox vai encostada no pilar do
+		# salão, virada para dentro (atrás do balcão ela bateria na geladeira)
+		_jukebox(Vector3(0.5, 0, room_max.z - 0.4) if not open_air else Vector3(room_min.x + 0.75, 0, room_max.z - 0.7))
 	if BarProgress.level(&"neon") >= 1:
 		var neon := Node3D.new()
-		neon.position = Vector3(4.9, 2.2, ROOM_MAX.z - 0.04)
+		var neon_pos := Vector3(4.9, 2.2, room_max.z - 0.04) if not open_air 			else Vector3(room_max.x - 1.3, room_max.y - 0.5, room_max.z - 0.25)
+		neon.position = neon_pos
 		neon.rotation_degrees.y = 180
 		add_child(neon)
 		Mats.box(neon, Vector3(1.2, 0.42, 0.03), Vector3.ZERO, Color(0.06, 0.05, 0.08))
@@ -1172,7 +1446,7 @@ func _build_reforms() -> void:
 		txt.pixel_size = 0.0022
 		txt.modulate = Color(2.0, 0.5, 0.5)
 		var l := OmniLight3D.new()
-		l.position = Vector3(4.9, 2.2, ROOM_MAX.z - 0.5)
+		l.position = neon_pos - Vector3(0, 0, 0.45)
 		l.light_color = Color(1.0, 0.3, 0.3)
 		l.light_energy = 0.6
 		l.omni_range = 2.2
@@ -1209,30 +1483,63 @@ func _frame(pos: Vector3, yaw: float) -> void:
 	Mats.sphere(n, 0.04, Vector3(0.1, 0.1, 0.02), Color(1.0, 0.9, 0.4), false, Vector3(1, 1, 0.2))
 
 
+## Jukebox estilo Wurlitzer: arco de cima iluminado, tubos coloridos nas laterais,
+## vitrine com a lista de músicas e grade de alto-falante.
 func _jukebox(pos: Vector3) -> void:
 	has_jukebox = true
 	var n := Node3D.new()
 	n.position = pos
-	n.rotation_degrees.y = 180
+	n.rotation_degrees.y = 180 if pos.z > 0.0 else 0.0
 	add_child(n)
-	Mats.box(n, Vector3(0.8, 1.2, 0.5), Vector3(0, 0.6, 0), _wood_dark)
-	var dome := Mats.cylinder(n, 0.4, 0.5, Vector3(0, 1.2, 0), _wood_dark)
-	dome.rotation_degrees.x = 90
-	var glow_colors := [Color(1.0, 0.4, 0.2), Color(1.0, 0.8, 0.2), Color(1.0, 0.3, 0.6)]
-	for i in 3:
-		var tube := Mats.box(n, Vector3(0.06, 0.9, 0.02), Vector3(-0.3 + i * 0.3, 0.75, 0.26), glow_colors[i], false)
-		tube.material_override = Mats.toon(glow_colors[i], false, 0.5, 3.5)
-	var arc := Mats.torus(n, 0.3, 0.34, Vector3(0, 1.2, 0.26), Color(1.0, 0.8, 0.2))
-	arc.rotation_degrees.x = 90
-	arc.material_override = Mats.toon(Color(1.0, 0.8, 0.2), false, 0.5, 3.0)
-	Mats.box(n, Vector3(0.5, 0.25, 0.02), Vector3(0, 0.35, 0.26), Color(0.15, 0.1, 0.08), false)
+	var madeira := _wood_dark
+	var cromo := Color(0.82, 0.83, 0.88)
+	var ambar := Color(1.0, 0.72, 0.25)
+	# corpo e pedestal
+	Mats.box(n, Vector3(0.78, 0.62, 0.46), Vector3(0, 0.31, 0), madeira.darkened(0.15))
+	_plank(n, Vector3(0.84, 0.56, 0.5), Vector3(0, 0.9, 0), 0.85, 0.3)
+	# arco de cima: meia-lua de madeira com a cúpula de vidro
+	var arco := Mats.cylinder(n, 0.42, 0.5, Vector3(0, 1.2, 0), madeira)
+	arco.rotation_degrees.x = 90
+	var cupula := Mats.cylinder(n, 0.37, 0.46, Vector3(0, 1.2, 0.02), Color(1.0, 0.95, 0.85), false)
+	cupula.rotation_degrees.x = 90
+	cupula.material_override = Mats.glass(ambar, 0.3)
+	cupula.set_meta("no_highlight", true)
+	# tubos de neon acompanhando o arco
+	var cores := [Color(1.0, 0.35, 0.2), Color(1.0, 0.82, 0.2), Color(0.3, 0.8, 1.0), Color(1.0, 0.35, 0.65)]
+	for i in 11:
+		var ang := PI * (0.06 + 0.88 * float(i) / 10.0)
+		var tube := Mats.sphere(n, 0.028, Vector3(cos(ang) * 0.34, 1.2 + sin(ang) * 0.34, 0.25),
+			cores[i % cores.size()], false, Vector3(1, 1, 0.5))
+		tube.material_override = Mats.toon(cores[i % cores.size()], false, 0.5, 4.5)
+		tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# tubos verticais nas laterais
+	for side: float in [-1.0, 1.0]:
+		var t := Mats.cylinder(n, 0.022, 0.52, Vector3(side * 0.37, 0.9, 0.23), cores[1], false)
+		t.material_override = Mats.toon(cores[1], false, 0.5, 3.5)
+		t.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		Mats.cylinder(n, 0.03, 0.08, Vector3(side * 0.37, 1.18, 0.23), cromo, false)
+		Mats.cylinder(n, 0.03, 0.08, Vector3(side * 0.37, 0.62, 0.23), cromo, false)
+	# vitrine da lista de músicas, acesa por dentro
+	var vitrine := Mats.box(n, Vector3(0.54, 0.26, 0.03), Vector3(0, 1.03, 0.235), Color(0.1, 0.1, 0.12), false)
+	vitrine.material_override = Mats.toon(Color(0.98, 0.92, 0.75), false, 0.5, 1.2)
+	for i in 5:
+		Mats.box(n, Vector3(0.46, 0.012, 0.01), Vector3(0, 1.13 - i * 0.045, 0.252), UiTheme.INK, false)
+	Mats.box(n, Vector3(0.6, 0.04, 0.05), Vector3(0, 1.18, 0.24), cromo, false)
+	# grade do alto-falante e botões
+	for i in 9:
+		Mats.box(n, Vector3(0.012, 0.3, 0.02), Vector3(-0.24 + i * 0.06, 0.72, 0.238), cromo.darkened(0.45), false)
+	for i in 6:
+		Mats.sphere(n, 0.018, Vector3(-0.2 + i * 0.08, 0.5, 0.24), cromo if i % 2 == 0 else Color(0.8, 0.15, 0.15), false)
 	var l := OmniLight3D.new()
-	l.position = pos + Vector3(0, 1.0, -0.5)
+	l.position = pos + Vector3(0, 1.1, 0.5 * (-1.0 if pos.z > 0.0 else 1.0))
 	l.light_color = Color(1.0, 0.6, 0.35)
-	l.light_energy = 0.7
-	l.omni_range = 2.5
+	l.light_energy = 2.2
+	l.omni_range = 3.2
+	l.light_volumetric_fog_energy = 1.8
 	add_child(l)
 	_omni(l)
+	LightFX.pool(self, Vector3(pos.x, 0.03, pos.z + (-0.8 if pos.z > 0.0 else 0.8)), 1.4, Color(1.0, 0.55, 0.35), 0.35)
+	_solid(Vector3(0.9, 1.5, 0.6), pos + Vector3(0, 0.75, 0), PLAYER_BLOCK_LAYER)
 
 
 func _fan(pos: Vector3) -> void:
@@ -1250,6 +1557,7 @@ func _fan(pos: Vector3) -> void:
 		blade.rotation.y = i * TAU / 4.0
 		spinner.add_child(blade)
 		var b := Mats.box(blade, Vector3(0.7, 0.015, 0.15), Vector3(0.45, 0, 0), _wood)
+		b.material_override = Mats.wood(_wood.lightened(0.1), _wood.darkened(0.3), 0.6, 0.5)
 		b.rotation.x = 0.15
 	spinners.append(spinner)
 
@@ -1258,61 +1566,115 @@ func _fan(pos: Vector3) -> void:
 
 ## Em GPUs fracas cada OmniLight redesenha a cena; lá usamos uma luz direcional
 ## quente + ambiente mais forte e mantemos só o brilho visual das lâmpadas.
-func _omni(l: OmniLight3D) -> void:
-	if GameManager.low_end:
+func _omni(l: Light3D, keep := false) -> void:
+	if GameManager.low_end and not keep:
 		l.queue_free()
 
 
 func _build_lights() -> void:
-	if GameManager.low_end:
-		var key := DirectionalLight3D.new()
-		key.rotation_degrees = Vector3(-62, 160, 0)
-		key.light_color = Color(1.0, 0.8, 0.6)
-		key.light_energy = 0.55
-		add_child(key)
-		# Environment mínimo: os efeitos de pós-processamento custavam metade do frame.
-		var we := find_children("*", "WorldEnvironment", false, false)[0] as WorldEnvironment
-		var env := Environment.new()
-		env.background_mode = Environment.BG_CLEAR_COLOR
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = loc.ambient
-		env.ambient_light_energy = 0.5
-		env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-		we.environment = env
+	# No modo leve toda luz pontual é descartada por _omni(): em GPU sem Vulkan cada uma
+	# redesenha a cena inteira. Lá o salão é iluminado pela única direcional do
+	# BarAtmosphere, e a forma da luz vem das poças do LightFX, que são de graça.
+	if open_air:
+		_build_kiosk_lights()
+		return
 	for x in [-2.6, 0.0, 2.6]:
-		_bulb(Vector3(x, 2.35, 0.05), Color(1.0, 0.72, 0.42), 0.9, 4.2, x == 0.0)
-	_bulb(Vector3(-3.4, 2.4, 3.5), Color(1.0, 0.7, 0.45), 0.8, 4.5, false)
-	_bulb(Vector3(3.2, 2.4, 3.8), Color(1.0, 0.7, 0.45), 0.8, 4.5, false)
-	# luminária fluorescente sobre a bancada (bebidas legíveis)
-	var tube := Mats.box(self, Vector3(1.6, 0.05, 0.08), Vector3(-1.0, 3.08, -1.8), Color(0.95, 1.0, 1.0), false)
-	tube.material_override = Mats.toon(Color(0.9, 1.0, 1.0), false, 0.5, 3.0)
+		_bulb(Vector3(x, 2.35, 0.05), Color(1.0, 0.72, 0.42), 2.6, 4.6, true)
+	_bulb(Vector3(room_min.x + 2.6, 2.4, 3.5), Color(1.0, 0.7, 0.45), 2.0, 5.0, false)
+	_bulb(Vector3(room_max.x - 2.8, 2.4, 3.8), Color(1.0, 0.7, 0.45), 2.0, 5.0, false)
+	# luminária fluorescente sobre a bancada (as bebidas precisam ficar legíveis)
+	_strip_light(Vector3(-1.0, 3.06, -1.8), 1.8, Color(0.86, 0.94, 1.0), 2.2)
+	# luz de serviço atrás do jogador, para a área de trabalho não virar silhueta
+	_strip_light(Vector3(1.9, 3.06, -1.8), 1.2, Color(0.9, 0.95, 1.0), 1.4)
+
+
+## Quiosque: lampadinhas no caibro e dois refletores quentes no balcão. O céu e a lua
+## fazem o resto, então aqui a luz artificial é só o aconchego.
+func _build_kiosk_lights() -> void:
+	var y := room_max.y - 0.16
+	for x in [-2.4, 0.0, 2.4]:
+		_bulb(Vector3(x, y, 0.1), Color(1.0, 0.78, 0.5), 2.2, 4.0, x == 0.0)
+	_strip_light(Vector3(-1.0, y + 0.05, -1.8), 1.8, Color(0.92, 0.96, 1.0), 1.8)
+	# lanternas de papel penduradas na beira do telhado
+	for i in 5:
+		var px := lerpf(room_min.x + 0.8, room_max.x - 0.8, float(i) / 4.0)
+		var cor: Color = [Color(1.0, 0.55, 0.35), Color(1.0, 0.85, 0.45), Color(0.45, 0.85, 0.95)][i % 3]
+		Mats.cylinder(self, 0.008, 0.3, Vector3(px, y + 0.1, room_max.z - 0.15), Color(0.1, 0.1, 0.1), false)
+		var lamp := Mats.sphere(self, 0.13, Vector3(px, y - 0.2, room_max.z - 0.15), cor, false, Vector3(1, 0.85, 1))
+		lamp.material_override = Mats.toon(cor, false, 0.5, 3.0)
+		lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if i % 2 == 0:
+			var l := OmniLight3D.new()
+			l.position = Vector3(px, y - 0.3, room_max.z - 0.3)
+			l.light_color = cor
+			l.light_energy = 1.1
+			l.omni_range = 3.4
+			l.light_volumetric_fog_energy = 1.4
+			add_child(l)
+			_omni(l)
+
+
+## Calha fluorescente: o tubo aceso mais uma luz retangular suave por baixo.
+func _strip_light(pos: Vector3, length: float, tint: Color, energy: float) -> void:
+	var tube := Mats.box(self, Vector3(length, 0.05, 0.09), pos, tint, false)
+	tube.material_override = Mats.toon(tint, false, 0.5, 2.6)
+	tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	Mats.box(self, Vector3(length + 0.1, 0.06, 0.16), pos + Vector3(0, 0.06, 0), Color(0.78, 0.78, 0.8), false)
 	var l := OmniLight3D.new()
-	l.position = Vector3(-1.0, 2.7, -1.6)
-	l.light_color = Color(0.95, 0.95, 1.0)
-	l.light_energy = 0.5
-	l.omni_range = 3.2
+	l.position = pos - Vector3(0, 0.1, 0)
+	l.light_color = tint
+	l.light_energy = energy
+	l.omni_range = 3.6
+	l.omni_attenuation = 1.4
+	l.light_volumetric_fog_energy = 0.7
 	add_child(l)
 	_omni(l)
+	LightFX.pool(self, Vector3(pos.x, BACK_TOP + 0.07, pos.z + 0.45), length * 0.85, tint, 0.3, 1.5)
 
 
+## Lâmpada pendurada: fio, cúpula de alumínio, o bulbo aceso e a luz com sombra.
 func _bulb(pos: Vector3, color: Color, energy: float, rng: float, shadows: bool) -> void:
-	var cord_len := ROOM_MAX.y - pos.y
+	var cord_len := room_max.y - pos.y
 	Mats.cylinder(self, 0.008, cord_len, Vector3(pos.x, pos.y + cord_len / 2.0, pos.z), Color(0.1, 0.1, 0.1), false)
-	var shade := Mats.cylinder(self, 0.06, 0.14, pos + Vector3(0, 0.08, 0), Color(0.15, 0.35, 0.25), true, 0.025)
+	var shade := Mats.cylinder(self, 0.14, 0.11, pos + Vector3(0, 0.1, 0), Color(0.16, 0.36, 0.26), true, 0.045)
 	shade.name = "Shade"
-	var bulb := Mats.sphere(self, 0.055, pos, color, false)
-	bulb.material_override = Mats.toon(Color(1.0, 0.9, 0.7), false, 0.5, 6.0)
+	# o avesso da cúpula é claro: é ele que rebate a luz para baixo
+	var inner := Mats.cylinder(self, 0.132, 0.015, pos + Vector3(0, 0.047, 0), Color(0.95, 0.9, 0.78), false, 0.05)
+	inner.material_override = Mats.toon(Color(1.0, 0.94, 0.8), false, 0.5, 0.8)
+	var bulb := Mats.sphere(self, 0.05, pos, color, false)
+	bulb.material_override = Mats.toon(Color(1.0, 0.92, 0.75), false, 0.5, 7.0)
 	bulb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var l := OmniLight3D.new()
-	l.position = pos - Vector3(0, 0.08, 0)
+	# a cúpula joga a luz para baixo: spot, não omni — é o que desenha a poça de luz
+	var l := SpotLight3D.new()
+	l.position = pos - Vector3(0, 0.06, 0)
+	l.rotation_degrees.x = -90.0
 	l.light_color = color
 	l.light_energy = energy
-	l.omni_range = rng
-	l.omni_attenuation = 0.8
-	l.shadow_enabled = shadows and RenderingServer.get_current_rendering_method() != "gl_compatibility"
-	l.shadow_blur = 2.0
+	l.spot_range = rng
+	l.spot_angle = 76.0
+	l.spot_angle_attenuation = 0.8
+	l.spot_attenuation = 1.1
+	l.light_size = 0.12
+	l.light_volumetric_fog_energy = 2.2
+	l.shadow_enabled = shadows and not GameManager.low_end
+	l.shadow_blur = 1.6
+	l.shadow_normal_bias = 1.4
 	add_child(l)
 	_omni(l)
+	# luz fraca sem sombra para o teto e as paredes não ficarem pretos
+	var up := OmniLight3D.new()
+	up.position = pos + Vector3(0, 0.12, 0)
+	up.light_color = color
+	up.light_energy = energy * 0.3
+	up.omni_range = rng * 0.7
+	up.light_volumetric_fog_energy = 0.6
+	add_child(up)
+	_omni(up)
+	# feixe no ar e a poça no chão: é o que dá volume à luz (e o que sobra no modo leve)
+	var drop := pos.y - 0.1
+	LightFX.beam(self, pos - Vector3(0, 0.08, 0), 0.13, drop * 0.62, drop, color, 0.1 if not GameManager.low_end else 0.16)
+	LightFX.pool(self, Vector3(pos.x, 0.03, pos.z), drop * 0.78, color, 0.22 if not GameManager.low_end else 0.4)
+	LightFX.pool(self, Vector3(pos.x, room_max.y - 0.03, pos.z), 0.7, color, 0.3, 1.6, false)
 
 
 # =================================================================== banquetas

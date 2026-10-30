@@ -30,14 +30,17 @@ static func toon(color: Color, outline := true, rough := 0.8, emission := 0.0) -
 		return _cache[key]
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
-	m.roughness = rough
+	m.roughness = clampf(rough, 0.75, 1.0)
 	m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-	m.specular_mode = BaseMaterial3D.SPECULAR_TOON
+	# sem reflexo especular: o ponto de luz do toon é o que mais puxava o cenário
+	# para o "realista brilhoso". A silhueta e o contorno é que dão a forma.
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	m.rim_enabled = true
-	m.rim = 0.25
-	m.rim_tint = 0.6
-	if GameManager.low_end:
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+	m.rim = 0.18
+	m.rim_tint = 0.7
+	# O sombreado por vértice era o que achatava tudo no modo leve: numa caixa de 8
+	# vértices não sobra variação nenhuma. Agora que o modo leve roda com pouquíssimas
+	# luzes (ver BarBuilder._build_lights), dá para pagar o sombreado por pixel.
 	if emission > 0.0:
 		m.emission_enabled = true
 		m.emission = color
@@ -55,12 +58,13 @@ static func plastic_mat(color: Color, rough := 0.8, emission := 0.0) -> Standard
 		return _cache[key]
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
-	m.roughness = clampf(rough, 0.35, 0.6)
-	m.metallic_specular = 0.35
+	m.roughness = clampf(rough, 0.6, 0.9)
+	m.metallic_specular = 0.1
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	m.diffuse_mode = BaseMaterial3D.DIFFUSE_BURLEY
 	m.rim_enabled = true
-	m.rim = 0.12
-	m.rim_tint = 0.4
+	m.rim = 0.1
+	m.rim_tint = 0.5
 	# sempre por pixel: por vértice o brilho do plástico vira estrelinhas
 	if emission > 0.0:
 		m.emission_enabled = true
@@ -70,18 +74,31 @@ static func plastic_mat(color: Color, rough := 0.8, emission := 0.0) -> Standard
 	return m
 
 
-static func glass(color: Color, alpha := 0.35, outline := false) -> StandardMaterial3D:
-	var key := "glass|%s|%s|%s" % [color.to_html(), alpha, outline]
+## Vidro (garrafa, copo, jarra, porta da geladeira). Ver DrinkShaders.GLASS: desenha só
+## a face da frente — desenhar as duas, como antes, fazia a garrafa aparecer dentro de
+## si mesma e o líquido brigar com o copo na hora de ordenar o transparente.
+static func glass(color: Color, alpha := 0.35, outline := false, thickness := 0.8, facet := false) -> ShaderMaterial:
+	var key := "glass|%s|%s|%s|%s|%s" % [color.to_html(), alpha, outline, thickness, facet]
 	if _cache.has(key):
 		return _cache[key]
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(color, alpha)
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.roughness = 0.05
-	m.metallic_specular = 1.0
-	m.rim_enabled = true
-	m.rim = 0.8
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var m := DrinkShaders.glass(color, alpha, thickness, facet)
+	if outline:
+		m = m.duplicate()
+		m.next_pass = outline_mat()
+	_cache[key] = m
+	return m
+
+
+## Madeira com veio, nós e verniz (ver BarShaders.WOOD). O material é compartilhado
+## por parâmetro, então as peças de madeira continuam mesclando numa malha só.
+static func wood(light: Color, dark: Color, varnish := 0.7, plank := 0.3, along_z := false,
+		wear := 0.25, outline := true) -> ShaderMaterial:
+	var key := "wood|%s|%s|%s|%s|%s|%s|%s" % [light.to_html(), dark.to_html(), varnish, plank, along_z, wear, outline]
+	if _cache.has(key):
+		return _cache[key]
+	var m := BarShaders.material(BarShaders.WOOD, {
+		"col_a": light, "col_b": dark, "varnish": varnish, "plank": plank,
+		"along_z": 1.0 if along_z else 0.0, "wear": wear})
 	if outline:
 		m.next_pass = outline_mat()
 	_cache[key] = m

@@ -18,7 +18,7 @@ var fullscreen := false
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
-	var testing := args.has("--autotest") or args.has("--bench") or args.has("--gallery")
+	var testing := args.has("--autotest") or args.has("--bench") or args.has("--gallery") or args.has("--views")
 	var cfg := ConfigFile.new()
 	if not testing and cfg.load(PATH) == OK:
 		master = clampf(cfg.get_value("audio", "master", master), 0.0, 1.0)

@@ -18,16 +18,28 @@ var state: State = State.MENU
 var resume_state: State = State.PLAYING
 var stats := {}
 var reputation := MAX_REPUTATION
-## Renderer de compatibilidade (GPUs antigas): menos luzes dinâmicas, sem MSAA.
+## Renderer de compatibilidade (GPU sem Vulkan): poucas luzes dinâmicas, sem SSAO,
+## sem nevoeiro volumétrico, sem glow e sem MSAA (o antisserrilhado lá é FXAA).
 var low_end := false
+## Escala de renderização do 3D no modo leve. É o botão de desempenho, e a conta é
+## quadrática: 0,85 custa o dobro de 0,6. O padrão é o que uma GeForce 210 aguenta;
+## em placa melhor (mas ainda sem Vulkan) suba com `-- --escala=0.85`.
+var render_scale := 0.6
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	low_end = (RenderingServer.get_current_rendering_method() == "gl_compatibility" 		or OS.get_cmdline_user_args().has("--low")) and not OS.get_cmdline_user_args().has("--high")
+	var args := OS.get_cmdline_user_args()
+	for a in args:
+		if a.begins_with("--escala="):
+			render_scale = clampf(float(a.trim_prefix("--escala=")), 0.4, 1.0)
+	low_end = (RenderingServer.get_current_rendering_method() == "gl_compatibility" 		or args.has("--low")) and not args.has("--high")
 	if low_end:
+		# O renderer de compatibilidade não tem FXAA (`viewport_set_screen_space_aa`
+		# falha) e MSAA ali é caro demais. Então o antisserrilhado possível é só
+		# resolução: `render_scale` é o botão, e a conta é quadrática.
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
-		get_viewport().scaling_3d_scale = 0.6
+		get_viewport().scaling_3d_scale = render_scale
 	reset_stats()
 
 

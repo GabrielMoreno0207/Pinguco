@@ -87,7 +87,7 @@ var _ephemeral := false
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
-	_ephemeral = args.has("--autotest") or args.has("--bench") or args.has("--gallery")
+	_ephemeral = args.has("--autotest") or args.has("--bench") or args.has("--gallery") or args.has("--views")
 	if not _ephemeral:
 		_load()
 

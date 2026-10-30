@@ -396,7 +396,7 @@ func _run() -> void:
 	# monta cada ponto, sem e com todas as reformas, e confere que o bar fica jogável
 	main.bar.visible = false
 	# só um WorldEnvironment vale por vez: tira o do bar principal enquanto testa os outros
-	var main_env: WorldEnvironment = main.bar.find_children("*", "WorldEnvironment", false, false)[0]
+	var main_env: BarAtmosphere = main.bar.atmosphere
 	main.bar.remove_child(main_env)
 	for loc_id: StringName in BarLocations.ORDER:
 		for full in [false, true]:

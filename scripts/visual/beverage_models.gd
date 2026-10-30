@@ -39,7 +39,7 @@ static func _longneck(root: Node3D, bev: BeverageData, detailed: bool) -> void:
 	var clear := bev.bottle_color.get_luminance() > 0.6
 	_mesh(root, lathe(prof, 16), Vector3.ZERO, Mats.glass(bev.bottle_color, 0.45 if clear else 0.88, detailed))
 	if clear:
-		_mesh(root, lathe(_scaled(prof, 0.86, 0.75), 12), Vector3(0, 0.008, 0), Mats.toon(bev.color, false, 0.2))
+		_mesh(root, lathe(_scaled(prof, 0.86, 0.75), 12), Vector3(0, 0.008, 0), _liquid_mat(bev, 0.25))
 	# tampinha de metal com serrilhado
 	var cap_col := Color(0.88, 0.72, 0.2) if bev.id != &"agua" else Color(0.2, 0.45, 0.95)
 	var cap := Mats.cylinder(root, 0.023, 0.014, Vector3(0, 0.335, 0), cap_col, false, 0.021)
@@ -54,7 +54,6 @@ static func _longneck(root: Node3D, bev: BeverageData, detailed: bool) -> void:
 	# rótulo do gargalo + rótulo principal
 	Mats.cylinder(root, 0.024, 0.03, Vector3(0, 0.27, 0), bev.color.darkened(0.15), false, 0.021)
 	_label(root, bev, 0.048, 0.095, 0.1, detailed)
-	_shine(root, 0.046, 0.03, 0.17, detailed)
 	if detailed and bev.station == &"fridge":
 		_droplets(root, 0.047, 0.02, 0.2)
 
@@ -65,12 +64,11 @@ static func _cachaca_bottle(root: Node3D, bev: BeverageData, detailed: bool) -> 
 	_mesh(root, lathe(prof, 16), Vector3.ZERO, Mats.glass(bev.bottle_color, 0.55, detailed))
 	# líquido (nível até o ombro)
 	_mesh(root, lathe(_profile([[0.0, 0.0], [0.05, 0.0], [0.051, 0.21], [0.0, 0.21]]), 12), Vector3(0, 0.008, 0),
-		Mats.glass(bev.color, 0.75) if bev.color.get_luminance() > 0.85 else Mats.toon(bev.color, false, 0.2))
+		_liquid_mat(bev, 0.21))
 	# rolha + lacre
 	Mats.cylinder(root, 0.02, 0.035, Vector3(0, 0.395, 0), Color(0.72, 0.5, 0.3), false, 0.022)
 	Mats.cylinder(root, 0.026, 0.03, Vector3(0, 0.36, 0), bev.color.darkened(0.35), false)
 	_label(root, bev, 0.059, 0.115, 0.13, detailed)
-	_shine(root, 0.057, 0.03, 0.22, detailed)
 
 
 static func _wine_bottle(root: Node3D, bev: BeverageData, detailed: bool) -> void:
@@ -81,7 +79,6 @@ static func _wine_bottle(root: Node3D, bev: BeverageData, detailed: bool) -> voi
 	Mats.cylinder(root, 0.021, 0.07, Vector3(0, 0.355, 0), Color(0.6, 0.06, 0.12), false, 0.02)
 	Mats.cylinder(root, 0.022, 0.012, Vector3(0, 0.335, 0), Color(0.9, 0.75, 0.3), false)
 	_label(root, bev, 0.054, 0.11, 0.11, detailed)
-	_shine(root, 0.052, 0.04, 0.22, detailed)
 
 
 static func _square_bottle(root: Node3D, bev: BeverageData, detailed: bool) -> void:
@@ -90,17 +87,17 @@ static func _square_bottle(root: Node3D, bev: BeverageData, detailed: bool) -> v
 	_mesh(root, body, Vector3(0, 0.1, 0), Mats.glass(bev.bottle_color, 0.5, detailed))
 	var liq := BoxMesh.new()
 	liq.size = Vector3(0.088, 0.17, 0.064)
-	_mesh(root, liq, Vector3(0, 0.09, 0), Mats.toon(bev.color, false, 0.15))
+	_mesh(root, liq, Vector3(0, 0.09, 0), _liquid_mat(bev, 0.17))
 	# ombro + gargalo curtinho + tampa de rosca
 	_mesh(root, lathe(_profile([[0.05, 0.0], [0.04, 0.02], [0.022, 0.04], [0.02, 0.07], [0.0, 0.07]]), 4, PI / 4.0),
 		Vector3(0, 0.2, 0), Mats.glass(bev.bottle_color, 0.5))
 	Mats.cylinder(root, 0.025, 0.04, Vector3(0, 0.285, 0), Color(0.12, 0.1, 0.1) if bev.id != &"gin" else Color(0.85, 0.85, 0.88), false)
 	# selo diagonal (garrafa de "importado")
-	var seal := Mats.box(root, Vector3(0.012, 0.16, 0.002), Vector3(0.0, 0.17, 0.0385), bev.color.darkened(0.3), false)
+	var seal := Mats.box(root, Vector3(0.012, 0.16, 0.002), Vector3(0.0, 0.17, 0.0395), bev.color.darkened(0.3), false)
 	seal.rotation.z = 0.6
-	_flat_label(root, bev, Vector3(0, 0.1, 0.0385), Vector2(0.085, 0.09), detailed)
+	_flat_label(root, bev, Vector3(0, 0.1, 0.0382), Vector2(0.085, 0.09), detailed)
 	if detailed:
-		var streak := Mats.box(root, Vector3(0.008, 0.15, 0.002), Vector3(-0.038, 0.11, 0.0386), Color.WHITE, false)
+		var streak := Mats.box(root, Vector3(0.008, 0.15, 0.002), Vector3(-0.038, 0.11, 0.0425), Color.WHITE, false)
 		streak.material_override = Mats.unshaded(Color(1, 1, 1, 0.45), true)
 		streak.set_meta("no_highlight", true)
 
@@ -110,7 +107,7 @@ static func _jar(root: Node3D, bev: BeverageData, detailed: bool) -> void:
 	var prof := _profile([[0.0, 0.0], [0.07, 0.0], [0.078, 0.01], [0.084, 0.2], [0.09, 0.235], [0.088, 0.24]])
 	_mesh(root, lathe(prof, 18), Vector3.ZERO, Mats.glass(Color(0.9, 1, 1), 0.22, detailed))
 	_mesh(root, lathe(_profile([[0.0, 0.0], [0.072, 0.0], [0.078, 0.17], [0.0, 0.17]]), 14), Vector3(0, 0.01, 0),
-		Mats.glass(bev.color, 0.82))
+		_liquid_mat(bev, 0.17))
 	var top := Mats.cylinder(root, 0.077, 0.003, Vector3(0, 0.181, 0), bev.color.lightened(0.3), false)
 	top.material_override = Mats.toon(bev.color.lightened(0.3), false, 0.2, 0.2)
 	# bico
@@ -135,7 +132,6 @@ static func _jar(root: Node3D, bev: BeverageData, detailed: bool) -> void:
 			_strawberry(root, Vector3(cos(ang) * 0.04, 0.19, sin(ang) * 0.04), 0.022)
 		var straw := Mats.cylinder(root, 0.005, 0.22, Vector3(0.03, 0.23, 0.0), Color(1, 0.3, 0.5), false)
 		straw.rotation.z = -0.3
-	_shine(root, 0.085, 0.03, 0.2, detailed)
 	_label(root, bev, 0.086, 0.09, 0.07, detailed)
 
 
@@ -171,7 +167,7 @@ static func _strawberry(parent: Node3D, pos: Vector3, r: float) -> void:
 static func _ice(parent: Node3D, pos: Vector3, size: float, seed: int) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3.ONE * size
-	var ice := _mesh(parent, mesh, pos, Mats.glass(Color(0.85, 0.97, 1.0), 0.6))
+	var ice := _mesh(parent, mesh, pos, Mats.glass(Color(0.84, 0.95, 1.0), 0.5, false, 0.55, true))
 	ice.rotation = Vector3(0.4 * seed, 0.7 * seed + 0.3, 0.2 * seed)
 	return ice
 
@@ -208,7 +204,6 @@ static func _can(root: Node3D, bev: BeverageData, detailed: bool) -> void:
 	if detailed:
 		Mats.torus(root, 0.006, 0.01, Vector3(0, 0.161, 0.018), Color(0.75, 0.75, 0.8))
 		_droplets(root, 0.041, 0.02, 0.13)
-		_shine(root, 0.0405, 0.015, 0.14, detailed)
 
 
 static func _plate(root: Node3D, bev: BeverageData, detailed: bool) -> void:
@@ -261,20 +256,14 @@ static func build_snack(parent: Node3D, bev: BeverageData, pos: Vector3) -> Node
 	return n
 
 
-## Reflexo de vidro: faixa clara vertical no lado esquerdo da garrafa.
-static func _shine(root: Node3D, radius: float, y0: float, y1: float, detailed: bool) -> void:
-	if not detailed:
-		return
-	var a := -0.75
-	var p0 := Vector3(sin(a) * (radius + 0.001), y0, cos(a) * (radius + 0.001))
-	var p1 := Vector3(sin(a) * (radius + 0.001), y1, cos(a) * (radius + 0.001))
-	var s := Mats.limb(root, p0, p1, 0.005, Color.WHITE)
-	s.material_override = Mats.unshaded(Color(1, 1, 1, 0.5), true)
-	s.scale = Vector3(1.0, 1.0, 0.35)
-	s.set_meta("no_highlight", true)
-	var dot := Mats.sphere(root, 0.005, p1 + Vector3(0, 0.018, 0), Color.WHITE, false)
-	dot.material_override = s.material_override
-	dot.set_meta("no_highlight", true)
+## Líquido da bebida: transparente e com gás conforme o que ela é. `h` é a altura da
+## coluna, usada pelo shader para concentrar a cor no fundo.
+static func _liquid_mat(bev: BeverageData, h: float) -> ShaderMaterial:
+	var clarity := clampf(bev.color.get_luminance() * 1.1, 0.0, 1.0)
+	if bev.id == &"agua":
+		clarity = 1.0
+	var fizz := bev.id in [&"cerveja", &"refrigerante", &"chopp"]
+	return DrinkShaders.liquid(bev.color, clarity, fizz, h)
 
 
 ## Gotinhas de condensação (bebida gelada), numa malha só.
@@ -310,15 +299,26 @@ static func _label(root: Node3D, bev: BeverageData, radius: float, y: float, h: 
 		paper.set_meta("label", true)
 		Mats.cylinder(root, radius + 0.0008, h * 0.12, Vector3(0, y + h * 0.44, 0), accent, false)
 		Mats.cylinder(root, radius + 0.0008, h * 0.12, Vector3(0, y - h * 0.44, 0), accent, false)
-	# medalhão e letra "abraçam" o cilindro (giram em volta do eixo para colar na curva)
+	# medalhão e letra "abraçam" o cilindro (giram em volta do eixo para colar na curva).
+	# O afastamento tem que vencer a flecha do arco, senão as pontas do medalhão e da
+	# letra afundam dentro da garrafa — era o que acontecia com um valor fixo de 2 mm.
 	var badge_r := minf(h * 0.36, radius * 0.46)
 	var a_badge := -0.42
 	var a_letter := 0.5
-	var b := _badge(root, bev, Vector3(sin(a_badge) * (radius + 0.002), y, cos(a_badge) * (radius + 0.002)), badge_r, detailed)
+	var rb := radius + _chord_gap(radius, badge_r * 1.12)
+	var b := _badge(root, bev, Vector3(sin(a_badge) * rb, y, cos(a_badge) * rb), badge_r, detailed)
 	b.rotation.y = a_badge
 	if detailed:
-		var l := _letter(root, bev, Vector3(sin(a_letter) * (radius + 0.003), y, cos(a_letter) * (radius + 0.003)), badge_r)
+		var rl := radius + _chord_gap(radius, badge_r * 1.3)
+		var l := _letter(root, bev, Vector3(sin(a_letter) * rl, y, cos(a_letter) * rl), badge_r)
 		l.rotation.y = a_letter
+
+
+## Quanto uma peça chapada de meia-largura `half` precisa se afastar do eixo para não
+## cortar um cilindro de raio `r` (flecha do arco mais uma folga).
+static func _chord_gap(r: float, half: float) -> float:
+	var h := minf(half, r * 0.98)
+	return r - sqrt(maxf(r * r - h * h, 0.0)) + 0.0015
 
 
 ## Rótulo chapado (garrafa quadrada).
@@ -330,9 +330,9 @@ static func _flat_label(root: Node3D, bev: BeverageData, pos: Vector3, size: Vec
 	stripe.size = Vector3(size.x, size.y * 0.12, 0.003)
 	_mesh(root, stripe, pos + Vector3(0, size.y * 0.42, 0), Mats.toon(_accent(bev), false))
 	var badge_r := size.y * 0.3
-	_badge(root, bev, pos + Vector3(-size.x * 0.2, -size.y * 0.03, 0.002), badge_r, detailed)
+	_badge(root, bev, pos + Vector3(-size.x * 0.2, -size.y * 0.03, 0.0025), badge_r, detailed)
 	if detailed:
-		_letter(root, bev, pos + Vector3(size.x * 0.25, -size.y * 0.03, 0.003), badge_r)
+		_letter(root, bev, pos + Vector3(size.x * 0.25, -size.y * 0.03, 0.006), badge_r)
 
 
 ## Plaquinha de pé (panela, pratos): fundo de papel com medalhão e letra.
@@ -366,19 +366,19 @@ static func _badge(root: Node3D, bev: BeverageData, pos: Vector3, r: float, deta
 	var disc := MeshInstance3D.new()
 	disc.mesh = _disc(r)
 	disc.material_override = Mats.unshaded(bg)
-	disc.position.z = 0.0006
+	disc.position.z = 0.0012
 	n.add_child(disc)
 	var scale := r * 0.72
 	if detailed:
 		var edge := MeshInstance3D.new()
 		edge.mesh = Mats.flat_polygon_mesh(SymbolShapes.outline_polygon(bev.symbol), scale)
 		edge.material_override = Mats.unshaded(UiTheme.INK)
-		edge.position.z = 0.0012
+		edge.position.z = 0.0026
 		n.add_child(edge)
 	var sym := MeshInstance3D.new()
 	sym.mesh = Mats.flat_polygon_mesh(SymbolShapes.polygon(bev.symbol), scale)
 	sym.material_override = Mats.unshaded(fg)
-	sym.position.z = 0.0018
+	sym.position.z = 0.004
 	n.add_child(sym)
 	return n
 
@@ -424,6 +424,7 @@ static func build_glass(fill_bev: BeverageData = null) -> Node3D:
 	rim.material_override = Mats.glass(Color(0.95, 1.0, 1.0), 0.45)
 	rim.set_meta("no_highlight", true)
 	var liquid := _mesh(root, lathe(_profile([[0.0, 0.0], [0.029, 0.0], [0.035, 0.085], [0.0, 0.085]]), 12), Vector3(0, 0.016, 0), Mats.toon(Color.WHITE, false, 0.2))
+	liquid.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	liquid.name = "Liquid"
 	liquid.set_meta("no_highlight", true)
 	# superfície do líquido (um tom mais claro); escala junto com o nível
@@ -446,10 +447,12 @@ static func set_glass_fill(glass: Node3D, bev: BeverageData, amount: float) -> v
 		return
 	liquid.visible = true
 	var clear := bev.color.get_luminance() > 0.85 or bev.id == &"agua"
-	liquid.material_override = Mats.glass(bev.color.lerp(Color(0.7, 0.9, 1.0), 0.3), 0.32) if clear else Mats.toon(bev.color, false, 0.15, 0.25)
+	liquid.material_override = _liquid_mat(bev, 0.085)
 	var surface := liquid.get_node_or_null("Surface") as MeshInstance3D
 	if surface:
-		surface.material_override = Mats.glass(bev.color.lerp(Color.WHITE, 0.4), 0.5) if clear else Mats.toon(bev.color.lightened(0.28), false, 0.1, 0.35)
+		# a superfície é mais clara e pega mais brilho: é ela que dá o "cheio" do copo
+		surface.material_override = DrinkShaders.liquid(bev.color.lerp(Color.WHITE, 0.3),
+			0.85 if clear else 0.25, false, 0.002, 1.0)
 	liquid.scale = Vector3(1, amount, 1)
 	if amount < 0.99:
 		return
@@ -457,10 +460,14 @@ static func set_glass_fill(glass: Node3D, bev: BeverageData, amount: float) -> v
 	match bev.id:
 		&"cerveja":
 			# colarinho cremoso transbordando um pouco + bolhinhas subindo
-			_garnish(Mats.cylinder(glass, 0.0375, 0.018, Vector3(0, top + 0.005, 0), Color(1, 0.98, 0.9), false, 0.04))
+			var head := Mats.cylinder(glass, 0.0375, 0.018, Vector3(0, top + 0.005, 0), Color(1, 0.98, 0.9), false, 0.04)
+			head.material_override = DrinkShaders.foam(Color(1.0, 0.98, 0.9))
+			_garnish(head)
 			for i in 4:
 				var ang := i * 1.6
-				_garnish(Mats.sphere(glass, 0.012, Vector3(cos(ang) * 0.022, top + 0.016, sin(ang) * 0.022), Color(1, 0.98, 0.92), false, Vector3(1, 0.6, 1)))
+				var blob := Mats.sphere(glass, 0.012, Vector3(cos(ang) * 0.022, top + 0.016, sin(ang) * 0.022), Color(1, 0.98, 0.92), false, Vector3(1, 0.6, 1))
+				blob.material_override = DrinkShaders.foam(Color(1.0, 0.98, 0.9))
+				_garnish(blob)
 			for i in 5:
 				_garnish(Mats.sphere(glass, 0.0025, Vector3(-0.015 + i * 0.008, 0.035 + (i % 3) * 0.02, 0.026), Color(1, 0.95, 0.7), false))
 		&"caipirinha":
@@ -479,7 +486,9 @@ static func set_glass_fill(glass: Node3D, bev: BeverageData, amount: float) -> v
 			glass.add_child(berry)
 			_strawberry(berry, Vector3(-0.034, 0.112, 0.0), 0.012)
 			_garnish(berry)
-			_garnish(Mats.sphere(glass, 0.02, Vector3(-0.004, top + 0.004, 0.004), bev.color.lightened(0.45), false, Vector3(1.3, 0.45, 1.3)))
+			var cream := Mats.sphere(glass, 0.02, Vector3(-0.004, top + 0.004, 0.004), bev.color.lightened(0.45), false, Vector3(1.3, 0.45, 1.3))
+			cream.material_override = DrinkShaders.foam(bev.color.lightened(0.5))
+			_garnish(cream)
 		&"whisky", &"gin", &"refrigerante":
 			for i in 2:
 				_garnish(_ice(glass, Vector3(-0.01 + i * 0.018, top - 0.005, 0.005 - i * 0.01), 0.022, i + 1))

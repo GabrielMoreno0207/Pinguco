@@ -31,6 +31,14 @@ const DATA := {
 		"stool": Color(0.85, 0.15, 0.15),
 		"ambient": Color(0.85, 0.62, 0.45), "fog": Color(0.55, 0.38, 0.25),
 		"outside": 0, "sidewalk": Color(0.45, 0.45, 0.48),
+		# céu do fim de tarde até a noite fechada (ver BarAtmosphere)
+		"sky": {
+			"top_dusk": Color(0.13, 0.15, 0.32), "horizon_dusk": Color(0.86, 0.44, 0.22),
+			"top_night": Color(0.028, 0.032, 0.075), "horizon_night": Color(0.17, 0.11, 0.15),
+			"sun_dusk": Color(1.0, 0.56, 0.26), "sun_night": Color(0.52, 0.64, 1.0),
+			"sun_energy": 1.0, "moon_energy": 0.22, "sun_yaw": 155.0,
+		},
+		"grade_shadow": Color(0.11, 0.08, 0.11), "grade_light": Color(1.0, 0.96, 0.88),
 		"sign_bg": Color(0.12, 0.08, 0.16), "sign_fg": Color(1.6, 1.15, 0.45), "sign_sub": Color(1.6, 0.6, 0.8),
 		"posters": [
 			["FIADO?\nSÓ AMANHÃ!", Color(1.0, 0.95, 0.75), Color(0.86, 0.2, 0.2)],
@@ -60,6 +68,13 @@ const DATA := {
 		"stool": Color(0.45, 0.22, 0.1),
 		"ambient": Color(0.9, 0.65, 0.42), "fog": Color(0.45, 0.32, 0.22),
 		"outside": 1, "sidewalk": Color(0.38, 0.38, 0.42),
+		"sky": {
+			"top_dusk": Color(0.11, 0.12, 0.28), "horizon_dusk": Color(0.8, 0.4, 0.3),
+			"top_night": Color(0.035, 0.03, 0.062), "horizon_night": Color(0.28, 0.15, 0.13),
+			"sun_dusk": Color(1.0, 0.6, 0.32), "sun_night": Color(0.6, 0.66, 0.95),
+			"sun_energy": 0.9, "moon_energy": 0.26, "sun_yaw": 140.0,
+		},
+		"grade_shadow": Color(0.09, 0.07, 0.1), "grade_light": Color(1.0, 0.94, 0.82),
 		"sign_bg": Color(0.08, 0.14, 0.1), "sign_fg": Color(1.7, 1.25, 0.5), "sign_sub": Color(0.9, 1.6, 0.9),
 		"posters": [
 			["HAPPY HOUR\n18H ÀS 20H", Color(0.95, 0.72, 0.3), Color(0.16, 0.09, 0.06)],
@@ -87,8 +102,19 @@ const DATA := {
 		"ceiling": Color(0.78, 0.65, 0.38),
 		"fridge": Color(0.1, 0.6, 0.68), "fridge_label": "GELADA",
 		"stool": Color(1.0, 0.55, 0.3),
-		"ambient": Color(0.75, 0.72, 0.8), "fog": Color(0.3, 0.32, 0.45),
-		"outside": 2, "sidewalk": Color(0.9, 0.8, 0.58),
+		"ambient": Color(0.78, 0.76, 0.86), "fog": Color(0.34, 0.38, 0.52),
+		"outside": 2, "sidewalk": Color(0.95, 0.86, 0.64),
+		# quiosque: sem paredes na frente nem nas laterais, telhado de palha sobre pilares
+		# e planta menor que a dos salões fechados (o salão vira a areia lá fora).
+		"open": true,
+		"room": {"min": Vector3(-4.5, 0.0, -2.6), "max": Vector3(4.5, 2.75, 3.6)},
+		"sky": {
+			"top_dusk": Color(0.15, 0.22, 0.46), "horizon_dusk": Color(1.0, 0.52, 0.26),
+			"top_night": Color(0.04, 0.08, 0.2), "horizon_night": Color(0.16, 0.26, 0.44),
+			"sun_dusk": Color(1.0, 0.6, 0.3), "sun_night": Color(0.62, 0.74, 1.0),
+			"sun_energy": 1.5, "moon_energy": 0.8, "sun_yaw": 185.0,
+		},
+		"grade_shadow": Color(0.07, 0.11, 0.18), "grade_light": Color(1.0, 0.95, 0.86),
 		"sign_bg": Color(0.06, 0.2, 0.26), "sign_fg": Color(0.6, 1.6, 1.7), "sign_sub": Color(1.7, 0.9, 0.5),
 		"posters": [
 			["ÁGUA DE\nCOCO\nGELADA", Color(0.42, 0.78, 0.4), Color(1.0, 0.98, 0.9)],
